@@ -1,0 +1,198 @@
+# make a full daily array with np.nan array slices at times that are missing and interpolate missing values linearly
+def nan_helper( y ):
+    '''
+    Helper to handle indices and logical indices of NaNs.
+    Input:
+        - y, 1d numpy array with possible NaNs
+    Output:
+        - nans, logical indices of NaNs
+        - index, a function, with signature indices= index(logical_indices),
+          to convert logical indices of NaNs to 'equivalent' indices
+    Example:
+        >>> # linear interpolation of NaNs
+        >>> nans, x= nan_helper(y)
+        >>> y[nans]= np.interp(x(nans), x(~nans), y[~nans])
+        https://stackoverflow.com/questions/6518811/interpolate-nan-values-in-a-numpy-array
+    '''
+    return np.isnan( y ), lambda z: z.nonzero()[0]
+
+def interp_1d_along_axis( y ):
+    ''' interpolate across 1D timeslices of a 3D array. '''
+    nans, x = nan_helper( y )
+    y[nans] = np.interp( x(nans), x(~nans), y[~nans] )
+    return y
+
+def make_datetimes( timestr ):
+    # timestr = '19790703'
+    year = int(timestr[:4])
+    month = int(timestr[4:6])
+    day = int(timestr[6:])
+    return dt.datetime(year,month,day)
+
+def open_raster( fn ):
+    with rasterio.open( fn ) as rst:
+        arr = rst.read(1)
+    return arr
+
+def coordinates( fn=None, meta=None, numpy_array=None, input_crs=None, to_latlong=False ):
+    '''
+    take a raster file as input and return the centroid coords for each 
+    of the grid cells as a pair of numpy 2d arrays (longitude, latitude)
+
+    User must give either:
+        fn = path to the rasterio readable raster
+    OR
+        meta & numpy ndarray (usually obtained by rasterio.open(fn).read( 1 )) 
+        where:
+        meta = a rasterio style metadata dictionary ( rasterio.open(fn).meta )
+        numpy_array = 2d numpy array representing a raster described by the meta
+
+    input_crs = rasterio style proj4 dict, example: { 'init':'epsg:3338' }
+    to_latlong = boolean.  If True all coordinates will be returned as EPSG:4326
+                         If False all coordinates will be returned in input_crs
+    returns:
+        meshgrid of longitudes and latitudes
+
+    borrowed from here: https://gis.stackexchange.com/a/129857
+    ''' 
+    
+    import rasterio
+    import numpy as np
+    from affine import Affine
+    from pyproj import Proj, transform
+
+    if fn:
+        # Read raster
+        with rasterio.open( fn ) as r:
+            T0 = r.transform  # upper-left pixel corner affine transform
+            p1 = Proj( r.crs )
+            A = r.read( 1 )  # pixel values
+
+    elif (meta is not None) & (numpy_array is not None):
+        A = numpy_array
+        if input_crs != None:
+            p1 = Proj( input_crs )
+            T0 = meta[ 'transform' ]
+        else:
+            p1 = None
+            T0 = meta[ 'transform' ]
+    else:
+        BaseException( 'check inputs' )
+
+    # All rows and columns
+    cols, rows = np.meshgrid(np.arange(A.shape[1]), np.arange(A.shape[0]))
+    # Get affine transform for pixel centres
+    T1 = T0 * Affine.translation( 0.5, 0.5 )
+    # Function to convert pixel row/column index (from 0) to easting/northing at centre
+    rc2en = lambda r, c: ( c, r ) * T1
+    # All eastings and northings -- this is much faster than np.apply_along_axis
+    eastings, northings = np.vectorize(rc2en, otypes=[np.float, np.float])(rows, cols)
+
+    if to_latlong == False:
+        return eastings, northings
+    elif (to_latlong == True) & (input_crs != None):
+        # Project all longitudes, latitudes
+        longs, lats = transform(p1, p1.to_latlong(), eastings, northings)
+        return longs, lats
+    else:
+        BaseException( 'cant reproject to latlong without an input_crs' )
+
+def make_xarray_dset( fn, times ):
+    ''' make a NetCDF file with the NSIDC_0051 '''
+    with rasterio.open(fn) as rst:
+        arr = rst.read()
+        meta = rst.meta.copy()
+
+    xc,yc = coordinates(meta=meta, numpy_array=arr[1,...])
+    attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 'affine_transform': str(list(meta['transform']))}
+
+    ds = xr.Dataset({'sic':(['time','yc', 'xc'], arr)},
+                coords={'xc': ('xc', xc[0,]),
+                        'yc': ('yc', yc[:,0]),
+                        'time':times }, attrs=attrs )
+    return ds
+
+def mean_filter_2D( arr, footprint ):
+    from scipy.ndimage import generic_filter
+    return generic_filter( arr, np.nanmean, footprint=footprint )
+
+
+if __name__ == '__main__':
+    import os, rasterio
+    import datetime as dt
+    import pandas as pd
+    import numpy as np
+    import xarray as xr
+    from functools import partial
+    import multiprocessing as mp
+
+    # list all data
+    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/GTiff/alaska'
+    files = sorted([ os.path.join(r,fn) for r,s,files in os.walk(base_path) for fn in files if fn.endswith('.tif') ])
+    data_times = [ make_datetimes( os.path.basename(fn).split('.')[0].split('_')[1] ) for fn in files ]
+
+    # what dates are missing from the series of data we got from the NSIDC
+    # see this: https://stackoverflow.com/questions/2315032/how-do-i-find-missing-dates-in-a-list-of-sorted-dates
+    date_set = set(data_times[0] + dt.timedelta(x) for x in range((data_times[-1] - data_times[0]).days))
+    missing = sorted(date_set - set(data_times))
+
+    # find the missing dates across the series and fill in the gaps with nan data
+    times = pd.date_range('1978-10-26','2017-02-28', freq='D')
+    all_dates = np.array( times.to_pydatetime().tolist() )
+    with rasterio.open( files[0] ) as template:
+        meta = template.meta.copy()
+        height,width = template.shape
+        count = len( all_dates )
+
+    missing_ind = np.array([int(np.where(all_dates == dt.datetime(i.year,i.month,i.day))[0]) for i in missing])
+    non_missing_ind = np.array([int(np.where(all_dates == dt.datetime(i.year,i.month,i.day))[0]) for i in data_times ])
+
+    # make an empty 3-D array and slot in the data...
+    out_arr = np.zeros(shape=(count,height,width))
+    out_arr[ non_missing_ind ] = [ open_raster(fn) for fn in files ]
+    empty_arr = np.zeros( shape=(len(missing_ind),height, width) )
+    empty_arr[:] = np.nan
+    out_arr[ missing_ind ] = [i for i in empty_arr]
+
+    # interpolate across the np.nan's brought in with differencing each forecast_time group
+    meta.update(compress='lzw', count=out_arr.shape[0])
+    new_arr = np.apply_along_axis( interp_1d_along_axis, axis=0, arr=out_arr )
+
+    # # * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+    # # hanning smooth the data along the time axis... [check with Mark whether this is correct]
+
+    # np.hanning(5) # <<-- not sure how to implement this...
+
+    # # * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+
+    # spatially smooth the 2-D daily slices of data using a mean generic filter. (without any aggregation)
+    footprint = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
+    f = partial( mean_filter_2D, footprint=footprint )
+
+    # which values are NOT sea ice concentrations (0-1 range) 
+    ind = np.where( new_arr > 1 )
+    oob_vals = new_arr[ ind ].copy()
+
+    # set the oob's to np.nan for computation cleanliness
+    new_arr[ ind ] = np.nan
+
+    # filter the newly modified slices and re-stack to 3D array
+    pool = mp.Pool( 32 )
+    new_arr = np.array( pool.map( f, new_arr ) )
+    pool.close()
+    pool.join()
+    new_arr[ ind ] = oob_vals
+
+    # write this out as a GeoTiff
+    out_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/GTiff/alaska_singlefile/nsidc_0051_sic_nasateam_1978-2017.tif'
+    with rasterio.open( out_fn, 'w', **meta ) as out:
+        out.write( new_arr.astype(np.float32) )
+
+    # write it out as a NetCDF for aggregation and such with xarray
+    ds = make_xarray_dset( out_fn, times )
+    encoding = ds.sic.encoding.copy()
+    encoding.update({'zlib':True,'comp':5,'contiguous':False, 'dtype':'float32'})
+    ds.sic.encoding = encoding
+
+    out_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska.nc'
+    ds.to_netcdf( out_fn )
