@@ -18,154 +18,182 @@ def get_summer(month):
 def get_winter(month):
 	return (month == 1) | (month == 2)
 
-def freezeup_start( ds_sic, summer_mean_annual, summer_std_annual, year ):
-	ds_sic_year = ds_sic.sel( time=str(year) )
-	nlayers, rows, cols = ds_sic_year.shape
-	
-	if nlayers == 365:
-		leap = False
+def freezeup_start( ds_sic, summer_mean, summer_std, year ):
+	''' find the first instance of sic exceeding the summer mean + 1 standard deviation threshold '''
+
+	if calendar.isleap( int(year) ):
 		start_ordinalday = 244 # this is 9/1 for non-leap year
 	else:
-		leap = True
 		start_ordinalday = 245 # this is 9/1 for leap year
 
-	# the slice to September 1st 'thing' is mapped from Mark's Matlab code. I am choosing to slice to endofyear
-	daily_vals = ds_sic_year.sel( time=slice(str(year)+'-09-01', str(year)+'-12-31') )
-	mean_plus_std = (summer_mean_annual.sel(year=int(year)) + summer_std_annual.sel(year=int(year)))
+	# the slice to September 1st 'thing' is mapped from Mark's Matlab code. I am choosing to slice to endofyear...
+	# [ML NOTE] -- I think this is hairy and since we do find that there are start days of Sept1, it wont work for all Arctic
+	daily_vals = ds_sic.sel( time=slice(str(year)+'-09-01', str(year)+'-12-31') ).copy()
+	mean_plus_std = (summer_mean.sel(year=int(year)).copy() + summer_std.sel(year=int(year)).copy())
 	
 	# copy the 2D data slice for all locations in map and make a lower threshold of .15 or 15% conc
 	threshold = mean_plus_std.data.copy()
 	threshold[ threshold < .15 ] = .15
-	
-	# comparison with the threshold
-	arr = daily_vals <= threshold
 
 	# make a 2D mask of np.nan
 	mask = np.isnan( daily_vals.isel( time=0 ).data )
+	
+	# when does the daily sic exceed (or is equal-to) the threshold sic
+	arr = daily_vals >= threshold
 
 	def first_freezeup( x ):
-		''' find the first instance of freezing below the threshold along time axis '''
-		vals = np.where(np.diff( x.astype( np.int ) ) != 0)[0]
+		''' find the first instance of sic exceeding the threshold '''
+		vals, = np.where( x == True )
 		if vals.shape[0] > 0:
 			return vals.min() # get the first one only! for freezeup
 		else:
-			return -1
+			return -9999
 
 	# apply through time
-	ordinal_days_freezeup_start = np.apply_along_axis( first_freezeup, axis=0, arr=arr ).astype( np.float32 )
-	ordinal_days_freezeup_start[mask] = np.nan
+	ordinal_days_freezeup_start_index = np.apply_along_axis( first_freezeup, axis=0, arr=arr ).astype( np.float32 )
+	ordinal_days_freezeup_start_index[mask] = np.nan
+	# add our index to the ordinal day start (Sept.1)
+	ordinal_days_freezeup_start = ordinal_days_freezeup_start_index + start_ordinalday
 
-	# handle the off-case where we have a -1 that is outside of the mask.
-	if not ordinal_days_freezeup_start.any() == -1:
-		output_arr = np.array(ordinal_days_freezeup_start + start_ordinalday)
+	# handle the off-case where we have a -9999 that is outside of the mask.
+	if np.any(ordinal_days_freezeup_start[~mask] < 0):
+		raise ValueError( 'ERROR! -- {}'.format(year) )
+
+	return ordinal_days_freezeup_start
+	
+def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
+	''' find the first instance of sic exceeding the winter mean threshold '''
+
+	if calendar.isleap( int(year) ):
+		start_ordinalday = 244 # this is 9/1 for non-leap year
 	else:
-		BaseException( 'ERROR!' )
-	return output_arr
-	
-def freezeup_end( ds_sic, winter_mean_annual, freezeup_start_arr, year ):
-	# start reading from the freezup start day+1
-	start_day_current_year = freezeup_start_arr + 1
-	# select current year
-	ds_sic_year = ds_sic.sel( time=str(year) )
-	winter_mean_annual = winter_mean_annual.sel( year=int(year) )
+		start_ordinalday = 245 # this is 9/1 for leap year
 
-	def last_freezeup( arr, winter_mean_annual_value ):
-		if not np.isnan(winter_mean_annual_value):
-			threshold = winter_mean_annual_value - .10 # we are removing 10% from the mean value
-			ind = np.where( arr >= threshold )[0][0] # grab the first instance....
+	# select the current year values from Sept.1 - Dec.31
+	daily_vals = ds_sic.sel( time=slice(str(year)+'-09-01',str(year)+'-12-31') ).copy()
+
+	# make a mask from the nan's
+	mask = np.isnan( daily_vals.isel( time=0 ).data )
+
+	# remove 10% sic from winter mean values
+	winter_mean_year = winter_mean.sel( year=int(year) ).copy() - .10
+
+	arr = daily_vals >= winter_mean_year
+
+	def last_freezeup( x ):
+		vals, = np.where( x == True )
+		if vals.shape[0] > 0:
+			return vals.min() # grab the first instance
 		else:
-			ind = -1
-		return ind
+			return -9999
 
-	z,x,y = ds_sic_year.shape
-	result = np.zeros((x,y))
-	for i,j in np.ndindex(x,y):	
-		result[i,j] = last_freezeup( ds_sic_year[:,i,j], winter_mean_annual[i,j] )
+	ordinal_days_freezeup_end_index = np.apply_along_axis( last_freezeup, axis=0, arr=arr ).astype( np.float32 )
+	ordinal_days_freezeup_end_index[ mask ] = np.nan # mask it
+	ordinal_days_freezeup_end = ordinal_days_freezeup_end_index + start_ordinalday
 
-	# this would be the day of the year that the free
-	freezeup_end_day = result + start_day_current_year
+	# get index of locations where freezeup start and end are the same ordinal day
+	end_same_as_start = np.where(ordinal_days_freezeup_end[~mask] == freezeup_start_arr[~mask])
+
+	# # increment our freezeup end values that are the same date as the freezeup start values by 1
+	# update the values where they are the same
+	ordinal_days_freezeup_end[~mask][end_same_as_start] = ordinal_days_freezeup_end[~mask][end_same_as_start] + 1
+
+	# handle the off-case where we have a -9999 that is outside of the mask.
+	if np.any(ordinal_days_freezeup_end[~mask] < 0):
+		raise ValueError( 'ERROR! -- {}'.format(year) )
 	
-	# if calendar.isleap( int(year) ):
-	# 	year_ndays = 366
-	# else:
-	# 	year_ndays = 365
-
-	# # [Not Yet Implemented] handle situations where the end of freezeup straddles another year?
-	# if freezeup_end_day.any() > year_ndays:
-	# 	freezeup_end_day[ np.where( freezeup_end_day > year_ndays ) ]
-	return freezeup_end_day
-
-def wrap_fu_se( ds_sic, summer_mean_annual, summer_std_annual, winter_mean_annual, year ):
-	freezeup_start_arr = freezeup_start( ds_sic, summer_mean_annual, summer_std_annual, year )
-	freezeup_end_arr = freezeup_end( ds_sic, winter_mean_annual, freezeup_start_arr, year )
-	return {'start':freezeup_start_arr, 'end':freezeup_end_arr }
+	return ordinal_days_freezeup_end
 
 def breakup_start( ds_sic, winter_mean, winter_std, year ):
-	ds_sic_year = ds_sic.sel( time=str(year) )
-	threshold = (winter_mean.sel( year=int(year) ) - (2*winter_std)).sel( year=int(year) )
+	''' find the day that breakup starts '''
 
-	start_ordinalday = 45 # Feb. 14th per Mark's code
+	start_ordinalday = 45 # Feb. 14th per Mark's code -- no leap day math needed. 
 
-	# get a 2D mask, which is common in every layer
-	mask = np.isnan( ds_sic_year.isel(time=0).data )
-	daily_vals = ds_sic_year.sel( time=slice(str(year)+'-02-14', str(year)+'-08-01') )
+	# get daily values for the time range in Mark's Algo
+	daily_vals = ds_sic.sel( time=slice(str(year)+'-02-14', str(year)+'-08-01') ).copy()
 	time = daily_vals.time.to_index().to_pydatetime()
-
-	# # # # # TESTING
-	# x = daily_vals.data[ :,row,col ]
-	# thresh = threshold.data[ row,col ]
-	# # # # # END TESTING
-
-	def all_below_thresh_twoweeks_breakup( x, thresh ):
-		''' 
-		find the first instance of freezing below the threshold along time axis 
-		---
-		NOTES:
-		# goal here is to apply along axis of the daily_vals ds
-		# where we want to:
-		# 1. iterate through each day and 13 subsequent days (2 weeks total)
-		# 	and find when the entire 2 week period is below the given threshold value
-		# 2. once found, mark that day as the start of breakup
-		# 3. return that ordinal day number.
-		'''
-		below_thresh = [ idx for idx in range(len(x)) if (x[idx:idx+14] < thresh).all() ]
-		if len(below_thresh) > 0:
-			return below_thresh[0]
-		else:
-			return -1
 	
-	# perform apply_along_axis the hard way...
-	z,x,y = daily_vals.shape
-	result = np.zeros((x,y))
-	for i,j in np.ndindex(x,y):	
-		result[i,j] = all_below_thresh_twoweeks_breakup( daily_vals[:,i,j], threshold[i,j] )
+	threshold = (winter_mean.sel( year=int(year) ).copy() - (2*winter_std)).sel( year=int(year) ).copy()
+	
+	# get a 2D mask, which is common in every layer
+	mask = np.isnan( daily_vals.isel(time=0).data )
 
-	result[ mask ] = np.nan
-	ordinal_days_breakup_start = result + start_ordinalday
+	def alltrue( x ):
+		return x.all()
 
-	if ordinal_days_breakup_start.any() == -1:
-		raise BaseException( 'ERROR!' )
+	def wherefirst( x ):
+		vals, = np.where( x > 0 )
+		if len(vals) > 0:
+			return vals.min()
+		else:
+			return -9999
+
+	times,rows,cols = daily_vals.shape
+	# find where the 2week groups are all sic are below the threshold to start breakup
+	twoweek_groups_alltrue = [np.apply_along_axis(alltrue, axis=0, arr=(daily_vals[idx:idx+14,...] < threshold) ).astype(int) for idx in range(times)]
+	
+	arr = np.array( twoweek_groups_alltrue ) # stack to a 3D array
+
+	# ordinal_day_first_breakup_twoweeks
+	ordinal_days_breakup_start_index = np.apply_along_axis( wherefirst, arr=arr, axis=0 ).astype( np.float32 )
+	ordinal_days_breakup_start_index[ mask ] = np.nan # mask it
+	ordinal_days_breakup_start = ordinal_days_breakup_start_index + start_ordinalday
+
+	# handle the off-case where we have a -9999 that is outside of the mask.
+	if np.any(ordinal_days_breakup_start[~mask] < 0):
+		raise ValueError( 'ERROR! -- {}'.format(year) )
 		
 	return ordinal_days_breakup_start
 
-def breakup_end( ds_sic, summer_mean_annual, summer_std_annual, breakup_start_arr, year ):
-	ds_sic_year = ds_sic.sel( time=str(year) )
+def breakup_end( ds_sic, summer_mean, summer_std, year ):
+	if calendar.isleap( int(year) ):
+		start_ordinalday = 152 # June 1
+	else:
+		start_ordinalday = 153 # June 1
 
-	mean_plus_std = (summer_mean_annual.sel(year=int(year)) + summer_std_annual.sel(year=int(year)))
+	daily_vals = ds_sic.sel( time=slice(str(year)+'-06-01', str(year)+'-09-30') ).copy()
+
+	# make a mask
+	mask = np.isnan( daily_vals.isel(time=0).data )
+
+	mean_plus_std = (summer_mean.sel(year=int(year)) + summer_std.sel(year=int(year)))
 	threshold = mean_plus_std.data.copy()
 	threshold[ threshold < .15 ] = .15
 
-	arr = ds_sic_year < threshold
+	arr = daily_vals < threshold
 
 	def last_breakup( x ):
-		''' find the first instance of freezing below the threshold along time axis '''
-		vals = np.where(np.diff( x.astype( np.int ) ) != 0)[0]
+		''' find the last instance lessthan below the threshold along time axis '''
+		vals, = np.where( np.diff( x.astype(int) ) != 0 )
+		# add a 1 to the index since it is zero based and we are using it as a way to increment days
 		if vals.shape[0] > 0:
-			return vals.min() # get the first one only! for freezeup
+			return vals.max()+1 # get the first one only! for freezeup
 		else:
-			return -1
+			return -9999
 
-	ordinal_days_breakup_end = np.apply_along_axis( last_breakup, axis=0, arr=arr ).astype( np.float32 )
+	ordinal_days_breakup_end_index = np.apply_along_axis( last_breakup, axis=0, arr=arr ).astype( np.float32 )
+	ordinal_days_breakup_end_index[ mask ] = np.nan
+	ordinal_days_breakup_end = ordinal_days_breakup_end_index + start_ordinalday
+
+	if np.any(ordinal_days_breakup_end[~mask] < 0):
+		raise ValueError( 'ERROR! -- {}'.format(year) )
+	
+	return ordinal_days_breakup_end
+
+def wrap_fubu( year, ds_sic, summer_mean, summer_std, winter_mean, winter_std ):
+	freezeup_start_arr = freezeup_start( ds_sic, summer_mean, summer_std, year )
+	freezeup_end_arr = freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year )
+	breakup_start_arr = breakup_start( ds_sic, winter_mean, winter_std, year )
+	breakup_end_arr = breakup_end( ds_sic, summer_mean, summer_std, year )
+	return {'freezeup_start':freezeup_start_arr, 'freezeup_end':freezeup_end_arr, 
+			'breakup_start':breakup_start_arr, 'breakup_end':breakup_end_arr }
+
+def make_avg_ordinal( fubu, years, metric ):
+	''' 
+	metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
+	'''
+	return np.rint( np.mean(np.array([ fubu_years[year][metric] for year in years ]), axis=0) )
+
 
 
 if __name__ == '__main__':
@@ -177,6 +205,8 @@ if __name__ == '__main__':
 	import os, dask
 	from functools import partial
 	import calendar, datetime
+	import multiprocessing as mp
+	import rasterio
 
 	# open the NetCDF that we made...
 	fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska.nc'
@@ -205,22 +235,41 @@ if __name__ == '__main__':
 	winter_mean = winter.groupby( 'time.year' ).mean( dim='time' )
 	winter_std = winter.groupby( 'time.year' ).std( dim='time', ddof=1 )
 
-	# [ NOTE ]: to make an ordinal date that matches the somewhat asinine epoch used by matlab in python
+	# run it. -- maybe make this parallel?
+	f = partial( wrap_fubu, ds_sic=ds_sic, summer_mean=summer_mean, summer_std=summer_std, winter_mean=winter_mean, winter_std=winter_std )
+	pool = mp.Pool( 32 )
+	fubu_years = dict(zip(years,pool.map(f, years)))
+	pool.close()
+	pool.join()
+
+	# make a mask 
+	mask = np.isnan( ds_sic.isel( time=0 ).data )
+
+	# make averages in ordinal day across all fu/bu
+	metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']  
+	averages = { metric:make_avg_ordinal( fubu_years, years, metric) for metric in metrics }
+
+	# # show it not spatially warped... -- for testing....
+	output_filename = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/PNG/freezup_avg_allyears_ordinal.png'
+	show_2D_array_aspatial( averages['freezeup_end'], output_filename )
+
+	# Make a raster with the outputs
+	template_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/GTiff/alaska/1981/nt_19810101_n07_v1-1_n.tif'
+	with rasterio.open( template_fn ) as tmp:
+		meta = tmp.meta
+
+	for metric in metrics:
+		arr = averages[ metric ]
+		output_filename = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/PNG/{}_avg_allyears_ordinal.tif'.format(metric)
+		meta.update( compress='lzw', count=1 )
+		with rasterio.open( output_filename, 'w', **meta ) as out:
+			out.write( arr, 1 )
+
+	# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+	# SOME NOTES ABOUT TRANSLATING FROM MLAB :
+	# ----------------------------------------
+	# [ 1 ]: to make an ordinal date that matches the somewhat asinine epoch used by matlab in python
 	# ordinal_date = date.toordinal(date(1971,1,1)) + 366 
 	# if not the number will be 366 days off due to the epoch starting January 0, 0000 whereas in Py Jan 1, 0001.
-
-	# for testing...
-	summer_mean_annual=summer_mean
-	summer_std_annual=summer_std
-	winter_mean_annual=winter_mean
-	# year = '2012'
-	year = 2000
-
-	freezup_start_end_by_year = { year:wrap_fu( ds_sic, summer_mean_annual, summer_std_annual, winter_mean_annual.sel(year=year), str(year) ) for year in years }
-
-	# show it
-	output_filename = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/PNG/freezeup_date_test.png'
-	show_2D_array_aspatial( freezup_ordinal_day, output_filename )
-
-
-	# winter_mean_annual = winter_mean.sel(year=int(year))
+	# [ 2 ]: when computing stdev it is important to set the ddof=1 which is the matlab default.  Python leaves it at 0 default.
+	# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
