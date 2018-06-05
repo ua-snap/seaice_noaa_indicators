@@ -213,6 +213,31 @@ def make_avg_ordinal( fubu, years, metric ):
 	arr[ mask ] = np.nan
 	return arr.astype( np.float32 )
 
+def make_xarray_dset_years( arr_dict, years, coords, transform ):
+    ''' make a NetCDF file output computed metrics for FU/BU in a 3-D variable-based way '''
+
+    xc,yc = (coords['xc'], coords['yc'])
+    attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 'affine_transform':transform}
+
+    ds = xr.Dataset({ metric:(['year','yc', 'xc'], arr_dict[metric]) for metric in arr_dict.keys() },
+                coords={'xc': ('xc', xc),
+                        'yc': ('yc', yc),
+                        'year':years }, attrs=attrs )
+    return ds
+
+def make_xarray_dset_years_levels( arr, years, coords, metrics, transform ):
+    ''' make a NetCDF file output computed metrics for FU/BU in a 4-D way '''
+
+    xc,yc = (coords['xc'], coords['yc'])
+    attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 'affine_transform': transform}
+
+    ds = xr.Dataset({ 'ordinal_day_of_year':(['year','metrics','yc','xc'], arr) },
+                coords={'xc': ('xc', xc),
+                        'yc': ('yc', yc),
+                        'metric':metrics,
+                        'year':years }, attrs=attrs )
+    return ds
+
 
 if __name__ == '__main__':
 	import matplotlib
@@ -225,6 +250,7 @@ if __name__ == '__main__':
 	import calendar, datetime
 	import multiprocessing as mp
 	import rasterio
+	import pandas as pd
 
 	# open the NetCDF that we made...
 	fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska.nc'
@@ -241,7 +267,8 @@ if __name__ == '__main__':
 	mask = np.isnan( ds_sic.isel(time=0).data )
 
 	# # make climatology? --> 0-366 includes leaps --> this may make more sense to read in as a dask array, compute, write out
-	# ds_day_clim = ds.groupby( 'time.dayofyear' ).mean( dim='time' ).compute()
+	ds_clim = xr.open_dataset( fn, chunks={'time':500} )
+	ds_day_clim = ds_clim.groupby( 'time.dayofyear' ).mean( dim='time' ).compute()
 
 	# get the summer and winter seasons htat were determined in table 1 in the paper
 	summer = ds_sic.sel( time=get_summer( ds_sic[ 'time.month' ] ) )
@@ -260,11 +287,26 @@ if __name__ == '__main__':
 	pool.close()
 	pool.join()
 
+	# # make NC file with metric outputs as variables and years as the time dimension
+	# # --------- --------- --------- --------- --------- --------- --------- --------- ---------
+	# stack into arrays by metric
+	transform = ds.affine_transform
+	metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
+	stacked = { metric:np.array([fubu_years[year][metric] for year in years ]) for metric in metrics }
+	ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
+
+	# stack into a single array with metrics as 'levels',which may be undesirable
+	stacked_levels = np.array([ np.array([fubu_years[year][metric] for metric in metrics]) for year in years ])
+	ds_fubu_levels = make_xarray_dset_years_levels( stacked_levels, years, ds.coords, metrics, transform )
+
+	# [ for testing the outputs ] make a dataframe of True/False showing where -9999's (unsolvable pixels) exist
+	tf_df = pd.concat([pd.DataFrame([ (fubu_years[year][i] == -9999).any() for year in years ], columns=[i], index=years) for i in fubu_years[year].keys()], axis=1)
+
 	# make a mask 
 	mask = np.isnan( ds_sic.isel( time=0 ).data )
 
 	# make averages in ordinal day across all fu/bu
-	metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']  
+	metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
 	averages = { metric:make_avg_ordinal( fubu_years, years, metric) for metric in metrics }
 
 	# # # show it not spatially warped... -- for testing....
@@ -282,6 +324,12 @@ if __name__ == '__main__':
 		meta.update( compress='lzw', count=1, nodata=np.nan )
 		with rasterio.open( output_filename, 'w', **meta ) as out:
 			out.write( arr, 1 )
+
+	# making datetime from the ordinal day -- [ NOT YET PROPERLY IMPLEMENTED ]
+	dt = convert_ordinalday_year_to_datetime( year, ordinal_day )
+
+	# select a point in space and return the ordinal day and the sic values...
+
 
 	# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 	# SOME NOTES ABOUT TRANSLATING FROM MLAB :
