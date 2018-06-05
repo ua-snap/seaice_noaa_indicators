@@ -109,8 +109,6 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
 	
 	return ordinal_days_freezeup_end
 
-
-# # # #THERE IS SOMETHING AWRY HERE WITH THE COMPUTATION.... ITS GIVING UNDERFLOW OVERFLOW VALUES FOR SOME REASON.
 def breakup_start( ds_sic, winter_mean, winter_std, year ):
 	''' find the day that breakup starts '''
 
@@ -200,10 +198,11 @@ def wrap_fubu( year, ds_sic, summer_mean, summer_std, winter_mean, winter_std ):
 	return {'freezeup_start':freezeup_start_arr, 'freezeup_end':freezeup_end_arr, 
 			'breakup_start':breakup_start_arr, 'breakup_end':breakup_end_arr }
 
-# THIS IS NOT REALLY WORKING SINCE THERE ARE ISSUES WITH -9999 in breakup_start
 def make_avg_ordinal( fubu, years, metric ):
 	''' 
 	metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
+	[ NOTE ]: we are masking the -9999 values for these computations...  which will 
+				most likely need to change for proper use.
 	'''
 	# stack it
 	arr = np.array([ fubu_years[year][metric] for year in years ])
