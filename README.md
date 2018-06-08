@@ -1,8 +1,8 @@
-## SEA ICE NOAA INDICATORS
+# SEA ICE NOAA INDICATORS
 ---
-### __Current Processing Steps:__
+## __Current Processing Steps:__
 
-#### Preprocess the data:
+### Preprocess the data:
 - stack to a 3-D daily array, and linearly interpolate over the missing days to generate a full Daily time-series
 - moving window mean spatial filter 
 	- footprint shape:
@@ -16,9 +16,10 @@
 - _[?] have I implemented the mean filter properly?_
 - _[?] how to implement the Hanning Smoothing Filter?_
 
-#### FU/BU Computations:
+### FU/BU Computations:
 - group data to summer months (august/september) and compute average/stdev by year
 - group data to winter months (january/february) and compute average/stdev by year
+
 - __FREEZEUP Start:__
 	- for a given year, slice daily values to the dates Sept.1 through Dec.31
 	- compute summer_mean + summer_stdev for given year to use as a threshold.
@@ -44,5 +45,3 @@
 	- compute where the daily values are < threshold values
 	- find index of first daily value that is less than threshold and use this index value as the ordinal day for the FreezeUp in that year by adding to the ordinal day of June.1 to that index value (store back in NetCDF).
 	- _[?] is the index day the first or last day of the 2 week period, in the all_true computation?_
-
-
