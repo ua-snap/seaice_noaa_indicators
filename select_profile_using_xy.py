@@ -3,6 +3,7 @@
 import geopandas as gpd
 from shapely.geometry import Point
 import ast, rasterio
+from affine import Affine
 
 x,y = (-1915085, 937121)
 pt = Point(x,y)
