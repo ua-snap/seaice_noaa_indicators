@@ -164,7 +164,7 @@ if __name__ == '__main__':
     # parse some args
     parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
     parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
-    parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=str, help="window length to add to the output NetCDF file name" )
+    parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window length to add to the output NetCDF file name" )
     parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
     
     # unpack args
@@ -175,7 +175,7 @@ if __name__ == '__main__':
 
     # # # # # # 
     # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # window_len = 'paper_weights'
+    # # window_len = 'paper_weights'
     # ncpus = 32
     # window_len = 4
     # # # # # # 
@@ -212,7 +212,8 @@ if __name__ == '__main__':
     footprint = footprint_lu[ footprint_type ]
     spatial_smoothed = np.array(spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus ))
 
-    if window_len == 'paper_weights':
+    if window_len == 1:
+        window_len = 'paper_weights'
         # hanning smooth
         hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
         hanning_smoothed[(da_interp.values > 1) | (da_interp.values < 0)] = da_interp.values[(da_interp.values > 1) | (da_interp.values < 0)]
