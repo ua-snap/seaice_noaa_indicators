@@ -218,7 +218,7 @@ if __name__ == '__main__':
         hanning_smoothed[(da_interp.values > 1) | (da_interp.values < 0)] = da_interp.values[(da_interp.values > 1) | (da_interp.values < 0)]
     else:
         fsmooth2 = partial( smooth2, window_len=window_len, window='hanning' )
-        new_arr = np.apply_along_axis( fsmooth2, arr=new_arr, axis=0 )
+        hanning_smoothed = np.apply_along_axis( fsmooth2, arr=spatial_smoothed, axis=0 )
 
 
     # write this out as a GeoTiff
