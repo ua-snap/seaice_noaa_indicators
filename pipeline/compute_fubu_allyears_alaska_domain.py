@@ -330,6 +330,7 @@ if __name__ == '__main__':
     # end = '2017'
     # ncpus = 64
 
+    ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
     # slice the data to the full years... currently this is 1979-2016
     ds_sic = ds.sel( time=slice( begin, end ) )['sic']
     years = ds_sic.time.to_index().map(lambda x: x.year).unique().tolist()
