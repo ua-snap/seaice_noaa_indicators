@@ -324,7 +324,7 @@ if __name__ == '__main__':
 
     # # open the NetCDF that we made...
     # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc')
+    # fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc' )
     # ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
     # begin = '1979'
     # end = '2017'

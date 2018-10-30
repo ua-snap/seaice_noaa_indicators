@@ -117,6 +117,19 @@ def smooth3( x ):
     win = np.array([0.25,0.5,0.25])
     return signal.convolve(x, win, mode='same') / sum(win)
 
+# * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+# # hanning smooth the data along the time axis... [check with Mark whether this is correct]
+def smooth2( x, window_len, window ):
+    from scipy import signal
+    if window == 'flat': # moving average
+        win=np.ones(window_len,'d')
+    else:
+        # win = signal.hann( window_len )
+        windows = { 'hanning':np.hanning, 'hamming':np.hamming, 'bartlett':np.bartlett, 'blackman':np.blackman }
+        win = windows[ window ]( window_len )
+    filtered = signal.convolve(x, win, mode='same') / sum(win)
+    return filtered
+
 def stack_rasters( files, ncpus=32 ):
     pool = mp.Pool( ncpus )
     arr = np.array( pool.map( open_raster, files ) )
@@ -151,19 +164,20 @@ if __name__ == '__main__':
     # parse some args
     parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
     parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
-    parser.add_argument( "-s", "--suffix", action='store', dest='suffix', type=str, help="suffix to add to the output NetCDF file name" )
+    parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=str, help="window length to add to the output NetCDF file name" )
     parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
     
     # unpack args
     args = parser.parse_args()
     base_path = args.base_path
-    suffix = args.suffix
+    window_len = args.window_len
     ncpus = args.ncpus
 
     # # # # # # 
     # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # suffix = 'paper_weights'
+    # window_len = 'paper_weights'
     # ncpus = 32
+    # window_len = 4
     # # # # # # 
 
     # list all data
@@ -198,13 +212,17 @@ if __name__ == '__main__':
     footprint = footprint_lu[ footprint_type ]
     spatial_smoothed = np.array(spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus ))
 
-    # hanning smooth
-    hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
-    # da_interp.values[(da.values > 1) | (da.values < 0)] = da.values[(da.values > 1) | (da.values < 0)]
-    hanning_smoothed[(da_interp.values > 1) | (da_interp.values < 0)] = da_interp.values[(da_interp.values > 1) | (da_interp.values < 0)]
+    if window_len == 'paper_weights':
+        # hanning smooth
+        hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
+        hanning_smoothed[(da_interp.values > 1) | (da_interp.values < 0)] = da_interp.values[(da_interp.values > 1) | (da_interp.values < 0)]
+    else:
+        fsmooth2 = partial( smooth2, window_len=window_len, window='hanning' )
+        new_arr = np.apply_along_axis( fsmooth2, arr=new_arr, axis=0 )
+
 
     # write this out as a GeoTiff
-    out_fn = os.path.join( base_path,'GTiff','alaska_singlefile','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}.tif'.format(str(begin.year),str(end.year),suffix) )
+    out_fn = os.path.join( base_path,'GTiff','alaska_singlefile','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}.tif'.format(str(begin.year),str(end.year),window_len) )
     _ = make_output_dirs( os.path.dirname(out_fn) )
     meta.update(count=hanning_smoothed.shape[0])
     with rasterio.open( out_fn, 'w', **meta ) as out:
@@ -221,7 +239,7 @@ if __name__ == '__main__':
     encoding.update({ 'zlib':True, 'comp':5, 'contiguous':False, 'dtype':'float32' })
     out_ds.sic.encoding = encoding
 
-    out_fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}.nc'.format(str(begin.year),str(end.year),suffix) )
+    out_fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}.nc'.format(str(begin.year),str(end.year),window_len) )
     _ = make_output_dirs( os.path.dirname(out_fn) )
     out_ds.to_netcdf( out_fn, format='NETCDF3_64BIT' )
 
