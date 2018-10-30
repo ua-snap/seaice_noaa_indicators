@@ -310,8 +310,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser( description='compute freezeup/breakup dates from NSIDC-0051 prepped dailies' )
     parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="parent directory to store sub-dirs of NSIDC_0051 data downloaded and converted to GTiff" )
     parser.add_argument( "-f", "--fn", action='store', dest='fn', type=str, help="path to the generated NetCDF file of daily NSIDC-0051 sic." )
-    parser.add_argument( "-b", "--begin", action='store', dest='begin', type=str, help="beginning year of the climatology" )
-    parser.add_argument( "-e", "--end", action='store', dest='end', type=str, help="ending year of the climatology" )
+    parser.add_argument( "-begin", "--begin", action='store', dest='begin', type=str, help="beginning year of the climatology" )
+    parser.add_argument( "-end", "--end", action='store', dest='end', type=str, help="ending year of the climatology" )
     parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
     
     # unpack the args here...  It is just cleaner to do it this way...
