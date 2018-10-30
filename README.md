@@ -45,3 +45,8 @@
 	- compute where the daily values are < threshold values
 	- find index of first daily value that is less than threshold and use this index value as the ordinal day for the FreezeUp in that year by adding to the ordinal day of June.1 to that index value (store back in NetCDF).
 	- _[?] is the index day the first or last day of the 2 week period, in the all_true computation?_
+
+- other questions:
+	- [?] what is a good way to compare outputs?
+
+	

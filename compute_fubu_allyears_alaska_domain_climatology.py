@@ -302,40 +302,39 @@ if __name__ == '__main__':
     from functools import partial
     import calendar, datetime
     import multiprocessing as mp
-    import rasterio
+    import rasterio, affine
     import pandas as pd
-    # import argparse
 
-    # # parse some args
-    # parser = argparse.ArgumentParser( description='download / convert NSIDC-0051 Dailies' )
-    # parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="parent directory to store sub-dirs of NSIDC_0051 data downloaded and converted to GTiff" )
-    # parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
-    
-    # # unpack the args here...  It is just cleaner to do it this way...
-    # args = parser.parse_args()
-    # base_path = args.base_path
-    # ncpus = args.ncpus
-
+    window_len = 4
     # open the NetCDF that we made...
     base_path = '/atlas_scratch/malindgren/nsidc_0051_v2'
-    fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc')
-    ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
+    fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights_climatology.nc' )
+    ds = xr.open_dataset( fn ).load()
+    
+    # make a new_ds so we can re-use most of the other fubu computation but on a single 'year' [climatology]
+    time = pd.date_range('2004-01-01', '2004-12-31', freq='D')
+    arr = ds['sic'].values
+    xc = ds.xc.values
+    yc = ds.yc.values
+    transform = '[24877.0390602206, 0.0, -2249452.313150307, 0.0, -24706.883179945104, 1149853.2079733, 0.0, 0.0, 1.0]'
 
-    # slice the data to the full years... currently this is 1979-2016
-    ds_sic = ds.sel( time=slice( '1979', '2017' ) )['sic']
-    years = range( 1979, 2017 )
+    attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 'affine_transform':transform}
+    ds = xr.Dataset({ 'sic':(['time','yc', 'xc'], arr)},
+                coords={'xc': ('xc', xc),
+                        'yc': ('yc', yc),
+                        'time':time}, 
+                        attrs=attrs )
+
+    ds_sic = ds['sic']
+    years = [2004]
 
     # set all nodata pixels to np.nan
     ds_sic.data[ ds_sic.data > 1 ] = np.nan
 
     # make a no data mask
-    mask = np.isnan( ds_sic.isel(time=0).data )
+    mask = np.isnan( ds_sic.values )
 
-    # # make climatology? --> 0-366 includes leaps --> this may make more sense to read in as a dask array, compute, write out
-    ds_clim = xr.open_dataset( fn, chunks={'time':500} )
-    ds_day_clim = ds_clim.groupby( 'time.dayofyear' ).mean( dim='time' ).compute()
-
-    # get the summer and winter seasons that were determined in table 1 in the paper
+    # get the summer and winter seasons htat were determined in table 1 in the paper
     summer = ds_sic.sel( time=get_summer( ds_sic[ 'time.month' ] ) )
     winter = ds_sic.sel( time=get_winter( ds_sic[ 'time.month' ] ) )
 
@@ -355,13 +354,12 @@ if __name__ == '__main__':
     # # make NC file with metric outputs as variables and years as the time dimension
     # # --------- --------- --------- --------- --------- --------- --------- --------- ---------
     # stack into arrays by metric
-    transform = ds.affine_transform
-    metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
-    stacked = { metric:np.array([fubu_years[year][metric] for year in years ]) for metric in metrics }
-    ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
-    ds_fubu.to_netcdf( fn.replace('.nc', '_fubu_dates.nc'), format='NETCDF3_64BIT')
+    # transform = ds.affine_transform
+    # metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
+    # stacked = { metric:np.array([fubu_years[year][metric] for year in years ]) for metric in metrics }
+    # ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
 
-    # # stack into a single array with metrics as 'levels',which may be undesirable
+    # stack into a single array with metrics as 'levels',which may be undesirable
     # stacked_levels = np.array([ np.array([fubu_years[year][metric] for metric in metrics]) for year in years ])
     # ds_fubu_levels = make_xarray_dset_years_levels( stacked_levels, years, ds.coords, metrics, transform )
 
@@ -369,7 +367,7 @@ if __name__ == '__main__':
     # tf_df = pd.concat([pd.DataFrame([ (fubu_years[year][i] == -9999).any() for year in years ], columns=[i], index=years) for i in fubu_years[year].keys()], axis=1)
 
     # make a mask 
-    mask = np.isnan( ds_sic.isel( time=0 ).data )
+    # mask = np.isnan( ds_sic.isel( time=0 ).data )
 
     # make averages in ordinal day across all fu/bu
     metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
@@ -386,15 +384,12 @@ if __name__ == '__main__':
 
     for metric in metrics:
         arr = averages[ metric ]
-        output_filename = os.path.join(base_path,'outputs','{}_avg_allyears_ordinal_hann_paper_weights.tif'.format(metric))
-        dirname = os.path.dirname(output_filename)
-        if not os.path.exists(dirname):
-            _ = os.makedirs(dirname)
+        output_filename = os.path.join( base_path, 'outputs','{}_avg_allyears_ordinal_hann_paper_weights_climatology.tif'.format(metric) )
         meta.update( compress='lzw', count=1, nodata=np.nan )
         with rasterio.open( output_filename, 'w', **meta ) as out:
             out.write( arr, 1 )
 
-    # making datetime from the ordinal day -- [ NOT YET PROPERLY IMPLEMENTED ]
+    # # making datetime from the ordinal day -- [ NOT YET PROPERLY IMPLEMENTED ]
     # dt = convert_ordinalday_year_to_datetime( year, ordinal_day )
 
     # select a point in space and return the ordinal day and the sic values...

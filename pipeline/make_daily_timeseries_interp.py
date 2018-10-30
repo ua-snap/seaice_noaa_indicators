@@ -97,12 +97,8 @@ def coordinates( fn=None, meta=None, numpy_array=None, input_crs=None, to_latlon
     else:
         BaseException( 'cant reproject to latlong without an input_crs' )
 
-def make_xarray_dset( fn, times ):
-    ''' make a NetCDF file with the NSIDC_0051 '''
-    with rasterio.open(fn) as rst:
-        arr = rst.read()
-        meta = rst.meta.copy()
-
+def make_xarray_dset( arr, times, rasterio_meta_dict ):
+    meta = rasterio_meta_dict
     xc,yc = coordinates(meta=meta, numpy_array=arr[1,...])
     attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 'affine_transform': str(list(meta['transform']))}
 
@@ -116,6 +112,31 @@ def mean_filter_2D( arr, footprint ):
     from scipy.ndimage import generic_filter
     return generic_filter( arr, np.nanmean, footprint=footprint )
 
+def smooth3( x ):
+    from scipy import signal
+    win = np.array([0.25,0.5,0.25])
+    return signal.convolve(x, win, mode='same') / sum(win)
+
+def stack_rasters( files, ncpus=32 ):
+    pool = mp.Pool( ncpus )
+    arr = np.array( pool.map( open_raster, files ) )
+    pool.close()
+    pool.join()
+    return arr
+
+def spatial_smooth( arr, footprint='rooks', ncpus=32 ):
+    f = partial( mean_filter_2D, footprint=footprint )
+    pool = mp.Pool( ncpus )
+    out_arr = pool.map( f, [a for a in arr] )
+    pool.close()
+    pool.join()
+    return out_arr
+
+def make_output_dirs( dirname ):
+    if not os.path.exists( dirname ):
+        _ = os.makedirs( dirname )
+    return dirname
+
 
 if __name__ == '__main__':
     import os, rasterio
@@ -125,99 +146,84 @@ if __name__ == '__main__':
     import xarray as xr
     from functools import partial
     import multiprocessing as mp
+    import argparse
+
+    # parse some args
+    parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
+    parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
+    parser.add_argument( "-s", "--suffix", action='store', dest='suffix', type=str, help="suffix to add to the output NetCDF file name" )
+    parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
+    
+    # unpack args
+    args = parser.parse_args()
+    base_path = args.base_path
+    suffix = args.suffix
+    ncpus = args.ncpus
+
+    # # # # # # 
+    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # suffix = 'paper_weights'
+    # ncpus = 32
+    # # # # # # 
 
     # list all data
-    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/GTiff/alaska'
-    files = sorted([ os.path.join(r,fn) for r,s,files in os.walk(base_path) for fn in files if fn.endswith('.tif') ])
+    input_path = os.path.join( base_path,'GTiff','alaska' )
+    files = sorted([ os.path.join(r,fn) for r,s,files in os.walk(input_path) for fn in files if fn.endswith('.tif') ])
     data_times = [ make_datetimes( os.path.basename(fn).split('.')[0].split('_')[1] ) for fn in files ]
 
-    # what dates are missing from the series of data we got from the NSIDC
-    # see this: https://stackoverflow.com/questions/2315032/how-do-i-find-missing-dates-in-a-list-of-sorted-dates
-    date_set = set(data_times[0] + dt.timedelta(x) for x in range((data_times[-1] - data_times[0]).days))
-    missing = sorted(date_set - set(data_times))
+    # date-fu for filenames and slicing
+    begin = data_times[0]
+    end = data_times[-1]
+    begin_str = begin.strftime('%Y-%m-%d')
+    end_str = end.strftime('%Y-%m-%d')
 
-    # find the missing dates across the series and fill in the gaps with nan data
-    times = pd.date_range('1978-10-26','2017-02-28', freq='D')
-    all_dates = np.array( times.to_pydatetime().tolist() )
+    # stack the irregularly spaced data to a netcdf
     with rasterio.open( files[0] ) as template:
         meta = template.meta.copy()
         height,width = template.shape
-        count = len( all_dates )
 
-    missing_ind = np.array([int(np.where(all_dates == dt.datetime(i.year,i.month,i.day))[0]) for i in missing])
-    non_missing_ind = np.array([int(np.where(all_dates == dt.datetime(i.year,i.month,i.day))[0]) for i in data_times ])
+    arr = stack_rasters( files, ncpus=32 )
+    ds = make_xarray_dset( arr, pd.DatetimeIndex(data_times), meta )
+    da = ds['sic']
 
-    # make an empty 3-D array and slot in the data...
-    out_arr = np.zeros(shape=(count,height,width))
-    out_arr[ non_missing_ind ] = [ open_raster(fn) for fn in files ]
-    empty_arr = np.zeros( shape=(len(missing_ind),height, width) )
-    empty_arr[:] = np.nan
-    out_arr[ missing_ind ] = [i for i in empty_arr]
+    # RESAMPLE TO DAILY...
+    da_interp = da.resample(time='1D').interpolate('slinear')
 
-    # interpolate across the np.nan's brought in with differencing each forecast_time group
-    meta.update(compress='lzw', count=out_arr.shape[0])
-    new_arr = np.apply_along_axis( interp_1d_along_axis, axis=0, arr=out_arr )
-
-    # # * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-    # # # hanning smooth the data along the time axis... [check with Mark whether this is correct]
-    # def smooth2( x, window_len, window ):
-    #     from scipy import signal
-    #     if window == 'flat': # moving average
-    #         win=np.ones(window_len,'d')
-    #     else:
-    #         # win = signal.hann( window_len )
-    #         windows = { 'hanning':np.hanning, 'hamming':np.hamming, 'bartlett':np.bartlett, 'blackman':np.blackman }
-    #         win = windows[ window ]( window_len )
-    #     filtered = signal.convolve(x, win, mode='same') / sum(win)
-    #     return filtered
-
-    # window_len = 4
-    # fsmooth2 = partial(smooth2, window_len=window_len, window='hanning' )
-    # new_arr = np.apply_along_axis( fsmooth2, arr=new_arr, axis=0 )
-
-    # # hanning smooth the data along the time axis... [check with Mark whether this is correct]
-    def smooth3( x ):
-        from scipy import signal
-        win = np.array([0.25,0.5,0.25])
-        return signal.convolve(x, win, mode='same') / sum(win)
-
-    window_len = 'paper_weights'
-    new_arr = np.apply_along_axis( smooth3, arr=new_arr, axis=0 )
-    new_arr[(out_arr > 1) | (out_arr < 0)] = out_arr[(out_arr > 1) | (out_arr < 0)] 
-    # # * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-
+    # spatial smoothing...
     # spatially smooth the 2-D daily slices of data using a mean generic filter. (without any aggregation)
     footprint_type = 'rooks'
     footprint_lu = {'rooks':np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]]), 
                     'queens':np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])}
+
     footprint = footprint_lu[ footprint_type ]
+    spatial_smoothed = np.array(spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus ))
 
-    f = partial( mean_filter_2D, footprint=footprint )
-
-    # which values are NOT sea ice concentrations (0-1 range) 
-    ind = np.where( new_arr > 1 )
-    oob_vals = new_arr[ ind ].copy()
-
-    # set the oob's to np.nan for computation cleanliness
-    new_arr[ ind ] = np.nan
-
-    # filter the newly modified slices and re-stack to 3D array
-    pool = mp.Pool( 32 )
-    new_arr = np.array( pool.map( f, new_arr ) )
-    pool.close()
-    pool.join()
-    new_arr[ ind ] = oob_vals
+    # hanning smooth
+    hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
+    # da_interp.values[(da.values > 1) | (da.values < 0)] = da.values[(da.values > 1) | (da.values < 0)]
+    hanning_smoothed[(da_interp.values > 1) | (da_interp.values < 0)] = da_interp.values[(da_interp.values > 1) | (da_interp.values < 0)]
 
     # write this out as a GeoTiff
-    out_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/GTiff/alaska_singlefile/nsidc_0051_sic_nasateam_1978-2017_hann_{}.tif'.format(window_len)
+    out_fn = os.path.join( base_path,'GTiff','alaska_singlefile','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}.tif'.format(str(begin.year),str(end.year),suffix) )
+    _ = make_output_dirs( os.path.dirname(out_fn) )
+    meta.update(count=hanning_smoothed.shape[0])
     with rasterio.open( out_fn, 'w', **meta ) as out:
-        out.write( new_arr.astype(np.float32) )
+        out.write( hanning_smoothed.astype(np.float32) )
 
-    # write it out as a NetCDF for aggregation and such with xarray
-    ds = make_xarray_dset( out_fn, times )
-    encoding = ds.sic.encoding.copy()
-    encoding.update({'zlib':True,'comp':5,'contiguous':False, 'dtype':'float32'})
-    ds.sic.encoding = encoding
+    # write it out as a NetCDF
+    out_ds = da_interp.copy(deep=True)
+    out_ds.values = hanning_smoothed
+    out_ds = da_interp.to_dataset( name='sic' )
+    out_ds.attrs = ds.attrs
 
-    out_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(window_len)
-    ds.to_netcdf( out_fn )
+    # output encoding
+    encoding = out_ds.sic.encoding.copy()
+    encoding.update({ 'zlib':True, 'comp':5, 'contiguous':False, 'dtype':'float32' })
+    out_ds.sic.encoding = encoding
+
+    out_fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}.nc'.format(str(begin.year),str(end.year),suffix) )
+    _ = make_output_dirs( os.path.dirname(out_fn) )
+    out_ds.to_netcdf( out_fn, format='NETCDF3_64BIT' )
+
+
+

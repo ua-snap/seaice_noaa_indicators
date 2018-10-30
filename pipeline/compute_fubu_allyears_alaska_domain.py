@@ -304,36 +304,41 @@ if __name__ == '__main__':
     import multiprocessing as mp
     import rasterio
     import pandas as pd
-    # import argparse
+    import argparse
 
-    # # parse some args
-    # parser = argparse.ArgumentParser( description='download / convert NSIDC-0051 Dailies' )
-    # parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="parent directory to store sub-dirs of NSIDC_0051 data downloaded and converted to GTiff" )
-    # parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
+    # parse some args
+    parser = argparse.ArgumentParser( description='compute freezeup/breakup dates from NSIDC-0051 prepped dailies' )
+    parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="parent directory to store sub-dirs of NSIDC_0051 data downloaded and converted to GTiff" )
+    parser.add_argument( "-f", "--fn", action='store', dest='fn', type=str, help="path to the generated NetCDF file of daily NSIDC-0051 sic." )
+    parser.add_argument( "-b", "--begin", action='store', dest='begin', type=str, help="beginning year of the climatology" )
+    parser.add_argument( "-e", "--end", action='store', dest='end', type=str, help="ending year of the climatology" )
+    parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
     
-    # # unpack the args here...  It is just cleaner to do it this way...
-    # args = parser.parse_args()
-    # base_path = args.base_path
-    # ncpus = args.ncpus
+    # unpack the args here...  It is just cleaner to do it this way...
+    args = parser.parse_args()
+    base_path = args.base_path
+    fn = args.fn
+    begin = args.begin
+    end = args.end
+    ncpus = args.ncpus
 
-    # open the NetCDF that we made...
-    base_path = '/atlas_scratch/malindgren/nsidc_0051_v2'
-    fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc')
-    ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
+    # # open the NetCDF that we made...
+    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc')
+    # ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
+    # begin = '1979'
+    # end = '2017'
+    # ncpus = 64
 
     # slice the data to the full years... currently this is 1979-2016
-    ds_sic = ds.sel( time=slice( '1979', '2017' ) )['sic']
-    years = range( 1979, 2017 )
+    ds_sic = ds.sel( time=slice( begin, end ) )['sic']
+    years = ds_sic.time.to_index().map(lambda x: x.year).unique().tolist()
 
     # set all nodata pixels to np.nan
     ds_sic.data[ ds_sic.data > 1 ] = np.nan
 
     # make a no data mask
     mask = np.isnan( ds_sic.isel(time=0).data )
-
-    # # make climatology? --> 0-366 includes leaps --> this may make more sense to read in as a dask array, compute, write out
-    ds_clim = xr.open_dataset( fn, chunks={'time':500} )
-    ds_day_clim = ds_clim.groupby( 'time.dayofyear' ).mean( dim='time' ).compute()
 
     # get the summer and winter seasons that were determined in table 1 in the paper
     summer = ds_sic.sel( time=get_summer( ds_sic[ 'time.month' ] ) )
@@ -347,7 +352,7 @@ if __name__ == '__main__':
 
     # run it. -- maybe make this parallel?
     f = partial( wrap_fubu, ds_sic=ds_sic, summer_mean=summer_mean, summer_std=summer_std, winter_mean=winter_mean, winter_std=winter_std )
-    pool = mp.Pool( 32 )
+    pool = mp.Pool( ncpus )
     fubu_years = dict(zip(years,pool.map(f, years)))
     pool.close()
     pool.join()
@@ -360,16 +365,6 @@ if __name__ == '__main__':
     stacked = { metric:np.array([fubu_years[year][metric] for year in years ]) for metric in metrics }
     ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
     ds_fubu.to_netcdf( fn.replace('.nc', '_fubu_dates.nc'), format='NETCDF3_64BIT')
-
-    # # stack into a single array with metrics as 'levels',which may be undesirable
-    # stacked_levels = np.array([ np.array([fubu_years[year][metric] for metric in metrics]) for year in years ])
-    # ds_fubu_levels = make_xarray_dset_years_levels( stacked_levels, years, ds.coords, metrics, transform )
-
-    # # [ for testing the outputs ] make a dataframe of True/False showing where -9999's (unsolvable pixels) exist
-    # tf_df = pd.concat([pd.DataFrame([ (fubu_years[year][i] == -9999).any() for year in years ], columns=[i], index=years) for i in fubu_years[year].keys()], axis=1)
-
-    # make a mask 
-    mask = np.isnan( ds_sic.isel( time=0 ).data )
 
     # make averages in ordinal day across all fu/bu
     metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
@@ -393,11 +388,6 @@ if __name__ == '__main__':
         meta.update( compress='lzw', count=1, nodata=np.nan )
         with rasterio.open( output_filename, 'w', **meta ) as out:
             out.write( arr, 1 )
-
-    # making datetime from the ordinal day -- [ NOT YET PROPERLY IMPLEMENTED ]
-    # dt = convert_ordinalday_year_to_datetime( year, ordinal_day )
-
-    # select a point in space and return the ordinal day and the sic values...
 
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
