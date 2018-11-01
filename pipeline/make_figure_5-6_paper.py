@@ -30,7 +30,7 @@ if window_len == 1:
 # data
 # window_len = 4
 # netcdf_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska.nc'
-netcdf_fn = os.path.join( 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(window_len) )
+netcdf_fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(window_len) )
 ds = xr.open_dataset( netcdf_fn )
 a = Affine(*eval( ds.affine_transform )[:6]) # make an affine transform for lookups
 

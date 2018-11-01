@@ -72,7 +72,7 @@ for group in metric_groups:
 
 	# trend.plot(kind='line', ax=ax)
 
-	plt.savefig( os.path.join('png','barrow_avg_hann_{}_{}-{}_fig7a.png'.format(window_len, start, end)), figsize=(20,2), dpi=300)
+	plt.savefig( os.path.join(base_path, 'png','barrow_avg_hann_{}_{}-{}_fig7a.png'.format(window_len, start, end)), figsize=(20,2), dpi=300)
 	plt.cla()
 	plt.close()
 
