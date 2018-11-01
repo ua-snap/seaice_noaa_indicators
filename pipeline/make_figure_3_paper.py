@@ -12,17 +12,17 @@ if __name__ == '__main__':
 	from affine import Affine
 	import numpy as np
 	import rasterio, os, calendar, datetime
-	# import argparse
+	import argparse
 
-	# # parse some args
-	# parser = argparse.ArgumentParser( description='plot fig 3 paper' )
-	# parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
-	# parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window length to add to the output NetCDF file name" )
+	# parse some args
+	parser = argparse.ArgumentParser( description='plot fig 3 paper' )
+	parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
+	parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window length to add to the output NetCDF file name" )
 
-	# # unpack args
-	# args = parser.parse_args()
-	# base_path = args.base_path
-	# window_len = args.window_len
+	# unpack args
+	args = parser.parse_args()
+	base_path = args.base_path
+	window_len = args.window_len
 
 	# window_len = 4
 	# base_path = '/atlas_scratch/malindgren/nsidc_0051'
