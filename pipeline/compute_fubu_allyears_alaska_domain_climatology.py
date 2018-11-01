@@ -311,12 +311,18 @@ if __name__ == '__main__':
     parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="parent directory to store sub-dirs of NSIDC_0051 data downloaded and converted to GTiff" )
     parser.add_argument( "-f", "--fn", action='store', dest='fn', type=str, help="path to the generated NetCDF file of daily NSIDC-0051 sic." )
     parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
+    parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window length to add to the output NetCDF file name" )
     
     # unpack the args here...  It is just cleaner to do it this way...
     args = parser.parse_args()
     base_path = args.base_path
     fn = args.fn
     ncpus = args.ncpus
+    window_len = args.window_len
+
+    # handle custom hann
+    if window_len == 1:
+        window_len = 'paper_weights'
 
     # # # # # # # # # # # 
     # # open the NetCDF that we made...
@@ -384,7 +390,7 @@ if __name__ == '__main__':
 
     for metric in metrics:
         arr = averages[ metric ]
-        output_filename = os.path.join( base_path, 'outputs','{}_avg_allyears_ordinal_hann_paper_weights_climatology.tif'.format(metric) )
+        output_filename = os.path.join( base_path, 'outputs','{}_avg_allyears_ordinal_hann_{}_climatology.tif'.format(metric, window_len) )
         meta.update( compress='lzw', count=1, nodata=np.nan )
         with rasterio.open( output_filename, 'w', **meta ) as out:
             out.write( arr, 1 )

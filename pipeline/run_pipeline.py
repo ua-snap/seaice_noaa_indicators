@@ -23,7 +23,7 @@ _ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain.py','--','-b
 
 # calc FUBU clim
 fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_{}_climatology.nc'.format(str(window_len)) )
-_ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain_climatology.py','--','-b', base_path, '-f', fn, '-n', str(ncpus)])
+_ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain_climatology.py','--','-b', base_path, '-f', fn, '-n', str(ncpus), '-w', str(window_len)])
 
 # plot this stuff.
 _ = subprocess.call(['ipython','make_figure_3_paper.py','--','-b', base_path, '-w', str(window_len) ])
