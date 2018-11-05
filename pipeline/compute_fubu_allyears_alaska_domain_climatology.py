@@ -45,7 +45,8 @@ def freezeup_start( ds_sic, summer_mean, summer_std, year ):
         ''' find the first instance of sic exceeding the threshold '''
         vals, = np.where( x == True )
         if vals.shape[0] > 0:
-            return vals.min() # get the first one only! for freezeup
+             # get the first one only! for freezeup
+            return vals.min() + 1 # (+1 to make up for zero anchored index)
         else:
             return -9999
 
@@ -93,7 +94,7 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
     def last_freezeup( x, y ):
         vals, = np.where( x == True )
         if (vals.shape[0] > 0) and (y != -9999):
-            minval = vals.min()
+            minval = vals.min() + 1 # (+1 to make up for zero anchored index)
             if minval > (y - start_ordinalday):
                 out = minval
             else:

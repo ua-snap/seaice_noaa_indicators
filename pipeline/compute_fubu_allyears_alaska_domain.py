@@ -1,3 +1,4 @@
+
 def show_2D_array_aspatial( arr, output_filename ):
     img = plt.imshow( arr, interpolation='nearest' )
     plt.colorbar( img ) 
@@ -44,8 +45,9 @@ def freezeup_start( ds_sic, summer_mean, summer_std, year ):
     def first_freezeup( x ):
         ''' find the first instance of sic exceeding the threshold '''
         vals, = np.where( x == True )
+        # get the first one only! for freezeup
         if vals.shape[0] > 0:
-            return vals.min() # get the first one only! for freezeup
+            return vals.min() + 1 # (+1 to make up for zero anchored index)
         else:
             return -9999
 
@@ -93,7 +95,7 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
     def last_freezeup( x, y ):
         vals, = np.where( x == True )
         if (vals.shape[0] > 0) and (y != -9999):
-            minval = vals.min()
+            minval = vals.min() + 1 # (+1 to make up for zero anchored index)
             if minval > (y - start_ordinalday):
                 out = minval
             else:
@@ -105,7 +107,6 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
     ordinal_days_freezeup_end_index = np.zeros_like(arr[0,...].astype(np.float32))
     for i,j in np.ndindex(arr.shape[-2:]):
         ordinal_days_freezeup_end_index[i,j] = last_freezeup( arr[:,i,j], freezeup_start_arr[i,j] )
-
 
     # bad_data_index = ordinal_days_freezeup_end_index != -9999
     ordinal_days_freezeup_end = ordinal_days_freezeup_end_index + start_ordinalday
@@ -304,31 +305,31 @@ if __name__ == '__main__':
     import multiprocessing as mp
     import rasterio
     import pandas as pd
-    import argparse
+    # import argparse
 
-    # parse some args
-    parser = argparse.ArgumentParser( description='compute freezeup/breakup dates from NSIDC-0051 prepped dailies' )
-    parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="parent directory to store sub-dirs of NSIDC_0051 data downloaded and converted to GTiff" )
-    parser.add_argument( "-f", "--fn", action='store', dest='fn', type=str, help="path to the generated NetCDF file of daily NSIDC-0051 sic." )
-    parser.add_argument( "-begin", "--begin", action='store', dest='begin', type=str, help="beginning year of the climatology" )
-    parser.add_argument( "-end", "--end", action='store', dest='end', type=str, help="ending year of the climatology" )
-    parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
+    # # parse some args
+    # parser = argparse.ArgumentParser( description='compute freezeup/breakup dates from NSIDC-0051 prepped dailies' )
+    # parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="parent directory to store sub-dirs of NSIDC_0051 data downloaded and converted to GTiff" )
+    # parser.add_argument( "-f", "--fn", action='store', dest='fn', type=str, help="path to the generated NetCDF file of daily NSIDC-0051 sic." )
+    # parser.add_argument( "-begin", "--begin", action='store', dest='begin', type=str, help="beginning year of the climatology" )
+    # parser.add_argument( "-end", "--end", action='store', dest='end', type=str, help="ending year of the climatology" )
+    # parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
     
-    # unpack the args here...  It is just cleaner to do it this way...
-    args = parser.parse_args()
-    base_path = args.base_path
-    fn = args.fn
-    begin = args.begin
-    end = args.end
-    ncpus = args.ncpus
+    # # unpack the args here...  It is just cleaner to do it this way...
+    # args = parser.parse_args()
+    # base_path = args.base_path
+    # fn = args.fn
+    # begin = args.begin
+    # end = args.end
+    # ncpus = args.ncpus
 
-    # # open the NetCDF that we made...
-    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc' )
-    # ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
-    # begin = '1979'
-    # end = '2017'
-    # ncpus = 64
+    # open the NetCDF that we made...
+    base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc' )
+    ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
+    begin = '1979'
+    end = '2017'
+    ncpus = 64
 
     ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
     # slice the data to the full years... currently this is 1979-2016
