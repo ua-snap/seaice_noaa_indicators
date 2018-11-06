@@ -184,7 +184,7 @@ def breakup_start( ds_sic, winter_mean, winter_std, year ):
     def wherefirst( x ):
         vals, = np.where( x == True )
         if len(vals) > 0:
-            return vals.min()
+            return vals.min() + 1
         else:
             return -9999
 
@@ -195,10 +195,10 @@ def breakup_start( ds_sic, winter_mean, winter_std, year ):
     # ordinal_day_first_breakup_twoweeks
     ordinal_days_breakup_start_index = np.apply_along_axis( wherefirst, arr=arr, axis=0 ).astype( np.float32 )
     ordinal_days_breakup_start_index[ mask ] = np.nan # mask it
-    bad_data_index = ordinal_days_breakup_start_index != -9999
+    good_data_index = ordinal_days_breakup_start_index != -9999
     
     ordinal_days_breakup_start = np.copy( ordinal_days_breakup_start_index )
-    ordinal_days_breakup_start[ bad_data_index ] = ordinal_days_breakup_start_index[ bad_data_index ] + start_ordinalday
+    ordinal_days_breakup_start[ good_data_index ] = ordinal_days_breakup_start_index[ good_data_index ] + start_ordinalday + 14 # for end of 2 weeks....
     ordinal_days_breakup_start[ mask ] = np.nan # mask it
 
     # # handle the off-case where we have a -9999 that is outside of the mask.
@@ -305,31 +305,31 @@ if __name__ == '__main__':
     import multiprocessing as mp
     import rasterio
     import pandas as pd
-    # import argparse
+    import argparse
 
-    # # parse some args
-    # parser = argparse.ArgumentParser( description='compute freezeup/breakup dates from NSIDC-0051 prepped dailies' )
-    # parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="parent directory to store sub-dirs of NSIDC_0051 data downloaded and converted to GTiff" )
-    # parser.add_argument( "-f", "--fn", action='store', dest='fn', type=str, help="path to the generated NetCDF file of daily NSIDC-0051 sic." )
-    # parser.add_argument( "-begin", "--begin", action='store', dest='begin', type=str, help="beginning year of the climatology" )
-    # parser.add_argument( "-end", "--end", action='store', dest='end', type=str, help="ending year of the climatology" )
-    # parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
+    # parse some args
+    parser = argparse.ArgumentParser( description='compute freezeup/breakup dates from NSIDC-0051 prepped dailies' )
+    parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="parent directory to store sub-dirs of NSIDC_0051 data downloaded and converted to GTiff" )
+    parser.add_argument( "-f", "--fn", action='store', dest='fn', type=str, help="path to the generated NetCDF file of daily NSIDC-0051 sic." )
+    parser.add_argument( "-begin", "--begin", action='store', dest='begin', type=str, help="beginning year of the climatology" )
+    parser.add_argument( "-end", "--end", action='store', dest='end', type=str, help="ending year of the climatology" )
+    parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
     
-    # # unpack the args here...  It is just cleaner to do it this way...
-    # args = parser.parse_args()
-    # base_path = args.base_path
-    # fn = args.fn
-    # begin = args.begin
-    # end = args.end
-    # ncpus = args.ncpus
+    # unpack the args here...  It is just cleaner to do it this way...
+    args = parser.parse_args()
+    base_path = args.base_path
+    fn = args.fn
+    begin = args.begin
+    end = args.end
+    ncpus = args.ncpus
 
-    # open the NetCDF that we made...
-    base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc' )
-    ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
-    begin = '1979'
-    end = '2017'
-    ncpus = 64
+    # # open the NetCDF that we made...
+    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc' )
+    # ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
+    # begin = '1979'
+    # end = '2017'
+    # ncpus = 64
 
     ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
     # slice the data to the full years... currently this is 1979-2016
@@ -383,7 +383,7 @@ if __name__ == '__main__':
 
     for metric in metrics:
         arr = averages[ metric ]
-        output_filename = os.path.join(base_path,'outputs','{}_avg_allyears_ordinal_hann_paper_weights.tif'.format(metric))
+        output_filename = os.path.join(base_path,'outputs','{}_avg_{}-{}_ordinal_hann_paper_weights.tif'.format(metric, begin, end))
         dirname = os.path.dirname(output_filename)
         if not os.path.exists(dirname):
             _ = os.makedirs(dirname)
