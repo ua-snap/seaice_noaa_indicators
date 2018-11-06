@@ -314,6 +314,7 @@ if __name__ == '__main__':
     parser.add_argument( "-begin", "--begin", action='store', dest='begin', type=str, help="beginning year of the climatology" )
     parser.add_argument( "-end", "--end", action='store', dest='end', type=str, help="ending year of the climatology" )
     parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
+    parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window_len value used in hann smoothing" )
     
     # unpack the args here...  It is just cleaner to do it this way...
     args = parser.parse_args()
@@ -322,6 +323,11 @@ if __name__ == '__main__':
     begin = args.begin
     end = args.end
     ncpus = args.ncpus
+    window_len = args.window_len
+
+    # handle custom hann
+    if window_len == 1:
+        window_len = 'paper_weights'
 
     # # open the NetCDF that we made...
     # base_path = '/atlas_scratch/malindgren/nsidc_0051'
@@ -383,7 +389,7 @@ if __name__ == '__main__':
 
     for metric in metrics:
         arr = averages[ metric ]
-        output_filename = os.path.join(base_path,'outputs','{}_avg_{}-{}_ordinal_hann_paper_weights.tif'.format(metric, begin, end))
+        output_filename = os.path.join(base_path,'outputs','{}_avg_{}-{}_ordinal_hann_{}.tif'.format(metric, begin, end, window_len))
         dirname = os.path.dirname(output_filename)
         if not os.path.exists(dirname):
             _ = os.makedirs(dirname)
