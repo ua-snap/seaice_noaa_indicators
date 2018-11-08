@@ -27,7 +27,7 @@ for window_len in [1,3,4,5,6,7,8,9,10]:
 	else:
 		fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(str(window_len)))
 
-	_ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain.py','--','-b', base_path, '-f', fn, '-begin', begin, '-end', end])
+	_ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain.py','--','-b', base_path, '-f', fn, '-begin', begin, '-end', end, '-w', str(window_len)])
 
 	# calc FUBU clim
 	if window_len == 1:
@@ -36,6 +36,7 @@ for window_len in [1,3,4,5,6,7,8,9,10]:
 		fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_{}_climatology.nc'.format(str(window_len)) )
 
 	_ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain_climatology.py','--','-b', base_path, '-f', fn, '-n', str(ncpus), '-w', str(window_len)])
+	# _ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain.py','--','-b', base_path, '-f', fn, '-w', str(window_len)])
 
 	# plot this stuff.
 	_ = subprocess.call(['ipython','make_figure_3_paper.py','--','-b', base_path, '-w', str(window_len) ])

@@ -118,52 +118,6 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
     
     return ordinal_days_freezeup_end
 
-
-def freezeup_end_OLD( ds_sic, winter_mean, freezeup_start_arr, year ):
-    ''' find the first instance of sic exceeding the winter mean threshold '''
-
-    if calendar.isleap( int(year) ):
-        start_ordinalday = 244 # this is 9/1 for non-leap year
-    else:
-        start_ordinalday = 245 # this is 9/1 for leap year
-
-    # select the current year values from Sept.1 - Dec.31
-    daily_vals = ds_sic.sel( time=slice(str(year)+'-09-01',str(year)+'-12-31') ).copy()
-
-    # make a mask from the nan's
-    mask = np.isnan( daily_vals.isel( time=0 ).data )
-
-    # remove 10% sic from winter mean values
-    winter_mean_year = winter_mean.sel( year=int(year) ).copy() - .10
-
-    arr = daily_vals >= winter_mean_year
-
-    def last_freezeup( x ):
-        vals, = np.where( x == True )
-        if vals.shape[0] > 0:
-            return vals.min() # grab the first instance
-        else:
-            return -9999
-
-    ordinal_days_freezeup_end_index = np.apply_along_axis( last_freezeup, axis=0, arr=arr ).astype( np.float32 )
-    bad_data_index = ordinal_days_freezeup_end_index != -9999
-    ordinal_days_freezeup_end = np.empty_like( ordinal_days_freezeup_end_index )
-    ordinal_days_freezeup_end[ bad_data_index ] = ordinal_days_freezeup_end_index[ bad_data_index ] + start_ordinalday
-    ordinal_days_freezeup_end[ mask ] = np.nan # mask it
-
-    # get index of locations where freezeup start and end are the same ordinal day
-    end_same_as_start = np.where(ordinal_days_freezeup_end[~mask] == freezeup_start_arr[~mask])
-
-    # # increment our freezeup end values that are the same date as the freezeup start values by 1
-    # update the values where they are the same
-    ordinal_days_freezeup_end[~mask][end_same_as_start] = ordinal_days_freezeup_end[~mask][end_same_as_start] + 1
-
-    # # handle the off-case where we have a -9999 that is outside of the mask.
-    # if np.any(ordinal_days_freezeup_end[~mask] < 0):
-    #   raise ValueError( 'ERROR! -- {}'.format(year) )
-    
-    return ordinal_days_freezeup_end
-
 def breakup_start( ds_sic, winter_mean, winter_std, year ):
     ''' find the day that breakup starts '''
 
