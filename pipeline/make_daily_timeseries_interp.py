@@ -232,7 +232,8 @@ if __name__ == '__main__':
     # write it out as a NetCDF
     out_ds = da_interp.copy(deep=True)
     out_ds.values = hanning_smoothed
-    out_ds = da_interp.to_dataset( name='sic' )
+    # out_ds = da_interp.to_dataset( name='sic' )
+    out_ds = out_ds.to_dataset( name='sic' )
     out_ds.attrs = ds.attrs
 
     # output encoding
