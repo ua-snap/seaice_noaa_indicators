@@ -27,7 +27,7 @@ if __name__ == '__main__':
     # # # # #
 
     # make climatology --> 0-366 includes leaps
-    ds = xr.open_dataset( fn )
+    ds = xr.open_dataset( fn ).load()
     ds_sel = ds.sel( time=slice(begin,end) )
     clim = ds_sel.groupby( 'time.dayofyear' ).mean( dim='time' )
     clim['sic'].values[np.where(clim['sic'].values < 0)] = 0
