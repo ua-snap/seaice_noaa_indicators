@@ -12,6 +12,7 @@ ncpus = 32
 for window_len in [1,3,4,5,6,7,8,9,10]:
 	print(window_len)
 	_ = subprocess.call(['ipython','make_daily_timeseries_interp.py','--','-b', base_path, '-w', str(window_len)])
+	
 	# make clim
 	if window_len == 1:
 		fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc'.format(str(window_len))
@@ -23,6 +24,7 @@ for window_len in [1,3,4,5,6,7,8,9,10]:
 	begin = '1979'
 	end = '2017'
 	_ = subprocess.call(['ipython','make_daily_timeseries_climatology.py','--','-f', fn, '-o', out_fn, '-b', begin, '-e', end])
+	
 	# calc FUBU
 	if window_len == 1:
 		fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc')
@@ -44,4 +46,4 @@ for window_len in [1,3,4,5,6,7,8,9,10]:
 	_ = subprocess.call(['ipython','make_figure_3_paper.py','--','-b', base_path, '-w', str(window_len) ])
 	_ = subprocess.call(['ipython','make_figure_4_paper.py','--','-b', base_path, '-w', str(window_len) ])
 	_ = subprocess.call(['ipython','make_figure_5-6_paper.py','--','-b', base_path, '-w', str(window_len) ])
-	# _ = subprocess.call(['ipython','make_figure_7_paper.py','--','-b', base_path, '-w', str(window_len) ])
+	_ = subprocess.call(['ipython','make_figure_7_paper.py','--','-b', base_path, '-w', str(window_len) ])

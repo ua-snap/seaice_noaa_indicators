@@ -26,7 +26,7 @@ window_len = args.window_len
 # # TESTING
 # # data
 # window_len = 4
-# base_path = '/Users/malindgren/Documents/nsidc_0051'
+# base_path = '/atlas_scratch/malindgren/nsidc_0051'
 # # END TESTING
 
 # handle custom hann
@@ -89,7 +89,7 @@ for sl in [slice('1982-09-01','1986-09-30'), slice('2007-09-01','2012-09-30')]:
 	day_list = day_list.loc[sl.start:sl.stop]
 	day_list[:] = np.nan
 
-	out = []
+	# out = []
 	for dt,df in day_list.groupby( pd.Grouper(freq='Y') ):
 		year = dt.year
 		for metric in metrics:

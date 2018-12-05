@@ -22,14 +22,14 @@ if __name__ == '__main__':
 	base_path = args.base_path
 	window_len = args.window_len
 
+	# # TESTING
+	# window_len = '4'
+	# base_path = '/atlas_scratch/malindgren/nsidc_0051'
+	# # END TESTING
+
 	# handle custom hann
 	if window_len == 1:
 		window_len = 'paper_weights'
-
-	# # TESTING
-	# window_len = '4'
-	# base_path = '/Users/malindgren/Documents/nsidc_0051'
-	# # END TESTING
 
 	netcdf_fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(window_len) )
 	ds = xr.open_dataset( netcdf_fn )
@@ -108,14 +108,65 @@ if __name__ == '__main__':
 		fubu_clim[:] = np.nan
 		fubu_clim[ [freezeup_begin,freezeup_end,breakup_begin,breakup_end] ] = clim_vals_mean[[ freezeup_begin,freezeup_end,breakup_begin,breakup_end ]]
 
+		# # # NEW
+		# PLOT FUBU CLIMATOLOGY
+		# FU-BEGIN
+		fubu_clim_fu_begin = np.empty_like(clim_vals_mean)
+		fubu_clim_fu_begin[:] = np.nan
+		fubu_clim_fu_begin[freezeup_begin] = clim_vals_mean[freezeup_begin]
+		# FU-END
+		fubu_clim_fu_end = np.empty_like(clim_vals_mean)
+		fubu_clim_fu_end[:] = np.nan
+		fubu_clim_fu_end[freezeup_end] = clim_vals_mean[freezeup_end]
+		# BU-BEGIN
+		fubu_clim_bu_begin = np.empty_like(clim_vals_mean)
+		fubu_clim_bu_begin[:] = np.nan
+		fubu_clim_bu_begin[breakup_begin] = clim_vals_mean[breakup_begin]
+		# BU-END
+		fubu_clim_bu_end = np.empty_like(clim_vals_mean)
+		fubu_clim_bu_end[:] = np.nan
+		fubu_clim_bu_end[breakup_end] = clim_vals_mean[breakup_end]
+
+		# # # PLOT FUBU FROM THE DATA SERIES SHOWN
+		freezeup_begin,freezeup_end,breakup_begin,breakup_end = ind
+		fubu_dat = np.empty_like( annual_dat )
+		fubu_dat_fu_begin = np.empty_like(annual_dat)
+		fubu_dat_fu_begin[:] = np.nan
+		fubu_dat_fu_begin[freezeup_begin] = annual_dat[freezeup_begin]
+		# FU-END
+		fubu_dat_fu_end = np.empty_like(annual_dat)
+		fubu_dat_fu_end[:] = np.nan
+		fubu_dat_fu_end[freezeup_end] = annual_dat[freezeup_end]
+		# BU-BEGIN
+		fubu_dat_bu_begin = np.empty_like(annual_dat)
+		fubu_dat_bu_begin[:] = np.nan
+		fubu_dat_bu_begin[breakup_begin] = annual_dat[breakup_begin]
+		# BU-END
+		fubu_dat_bu_end = np.empty_like(annual_dat)
+		fubu_dat_bu_end[:] = np.nan
+		fubu_dat_bu_end[breakup_end] = annual_dat[breakup_end]
+		# # # END
+
 		plt.figure(figsize=(10, 4))
 		# plot the 'annual' data
 		plt.plot( annual_dat )
 
 		# plot extended climatology
 		plt.plot( clim_new[244:-122] )
-		plt.plot( np.concatenate([fubu_clim,fubu_clim])[244:-122], 'bo' )
-		plt.plot( fubu_dat, 'ro')
+		# # NEW
+		plt.plot( np.concatenate([fubu_clim_fu_begin,fubu_clim_fu_begin])[244:-122], 'bs' )
+		plt.plot( np.concatenate([fubu_clim_fu_end,fubu_clim_fu_end])[244:-122], 'bs' )
+		plt.plot( np.concatenate([fubu_clim_bu_begin,fubu_clim_bu_begin])[244:-122], 'rs' )
+		plt.plot( np.concatenate([fubu_clim_bu_end,fubu_clim_bu_end])[244:-122], 'rs' )
+		# # END
+
+		# plt.plot( np.concatenate([fubu_clim,fubu_clim])[244:-122], 'bo' )
+		# plt.plot( fubu_dat, 'ro')
+		plt.plot( fubu_dat_fu_begin, marker='s', fillstyle='none', color='blue')
+		plt.plot( fubu_dat_fu_end, marker='s', fillstyle='none', color='blue')
+		plt.plot( fubu_dat_bu_begin, marker='s', fillstyle='none', color='red')
+		plt.plot( fubu_dat_bu_end, marker='s', fillstyle='none', color='red')
+
 
 		plt.tight_layout()
 		plt.savefig( os.path.join(base_path,'png','barrow_avg_hann_{}_{}-{}.png'.format(window_len, sl.start.split('-')[0],sl.stop.split('-')[0])), figsize=(20,2), dpi=300)
