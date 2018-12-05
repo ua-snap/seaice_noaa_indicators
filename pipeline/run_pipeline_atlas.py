@@ -3,11 +3,11 @@
 # interpolate
 import subprocess, os
 # os.chdir('/Users/malindgren/Documents/repos/seaice_noaa_indicators/pipeline')
-os.chdir('/workspace/UA/malindgren/repos/seaice_noaa_indicators/pipeline')
+os.chdir('/atlas_scratch/malindgren/repos/seaice_noaa_indicators/pipeline')
 
 # base_path = '/atlas_scratch/malindgren/nsidc_0051'
 base_path = '/atlas_scratch/malindgren/nsidc_0051'
-ncpus = 4
+ncpus = 32
 
 for window_len in [1,3,4,5,6,7,8,9,10]:
 	print(window_len)

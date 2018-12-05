@@ -174,8 +174,8 @@ if __name__ == '__main__':
     ncpus = args.ncpus
 
     # # # # # # 
-    # # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # base_path = '/Users/malindgren/Documents/nsidc_0051'
+    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # # base_path = '/Users/malindgren/Documents/nsidc_0051'
     # # window_len = 'paper_weights'
     # ncpus = 32
     # window_len = 4
