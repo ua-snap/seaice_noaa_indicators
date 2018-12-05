@@ -19,8 +19,8 @@ if __name__ == '__main__':
     end = args.end
 
     # # # # # testing
-    # fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc'
-    # out_fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_paper_weights_climatology.nc'
+    # fn = '/Users/malindgren/Documents/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_4.nc'
+    # out_fn = '/Users/malindgren/Documents/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_4_climatology.nc'
     # begin = '1979'
     # end = '2017'
     # # # # #
@@ -29,5 +29,7 @@ if __name__ == '__main__':
     ds = xr.open_dataset( fn )
     ds_sel = ds.sel( time=slice(begin,end) )
     clim = ds_sel.groupby( 'time.dayofyear' ).mean( dim='time' )
-    clim.to_netcdf( out_fn, format='NETCDF3_64BIT' )
+    clim['sic'].values[np.where(clim['sic'].values < 0)] = 0
+    clim['sic'].values[np.where(clim['sic'].values > 1)] = 1
+    clim.to_netcdf( out_fn, format='NETCDF4' )
 

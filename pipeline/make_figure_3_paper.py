@@ -24,13 +24,14 @@ if __name__ == '__main__':
 	base_path = args.base_path
 	window_len = args.window_len
 
+	# # # TESTING
 	# window_len = 4
-	# base_path = '/atlas_scratch/malindgren/nsidc_0051'
+	# base_path = '/Users/malindgren/Documents/nsidc_0051'
+	# # # END TESTING
 
 	# handle custom hann
 	if window_len == 1:
 		window_len = 'paper_weights'
-
 
 	netcdf_fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(window_len))
 	ds = xr.open_dataset( netcdf_fn )
@@ -44,8 +45,9 @@ if __name__ == '__main__':
 	cols = [c for c,r in colrows]
 	rows = [r for c,r in colrows]
 
-	# make a climatology
-	clim_fn = netcdf_fn.replace( '.nc', '_1979-2007_climatology.nc' )
+	# make a climatology -- THIS IS OLDER BUT MAYBE STILL NEEDED? FOR PROPER COMPARISON
+	# #
+	# clim_fn = netcdf_fn.replace( '.nc', '_1979-2007_climatology.nc' )
 	# if not os.path.exists( clim_fn ):
 	# 	clim_sel = ds.sel( time=slice('1979','2007') )
 	# 	clim = clim_sel.groupby('time.dayofyear').mean('time')
@@ -53,9 +55,13 @@ if __name__ == '__main__':
 	# else:
 	# 	clim = xr.open_dataset( clim_fn )
 
-	clim_sel = ds.sel( time=slice('1979','2007') )
-	clim = clim_sel.groupby('time.dayofyear').mean('time')
-	clim.to_netcdf( clim_fn, format='NETCDF3_64BIT' )
+	# clim_sel = ds.sel( time=slice('1979','2007') )
+	# clim = clim_sel.groupby('time.dayofyear').mean('time')
+	# clim.to_netcdf( clim_fn, format='NETCDF4' )
+
+	# read in an already produced climatology
+	clim_fn = netcdf_fn.replace( '.nc', '_climatology.nc' )
+	clim = xr.open_dataset( clim_fn )
 
 	clim_sel = clim.sel( dayofyear=slice(121, 366) )
 	clim_hold = [ clim_sel.sic[:,r,c].values for c,r in colrows ]

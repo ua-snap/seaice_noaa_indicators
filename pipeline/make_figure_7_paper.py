@@ -23,7 +23,10 @@ args = parser.parse_args()
 base_path = args.base_path
 window_len = args.window_len
 
+# # TESTING
 # window_len = 4
+# base_path = '/Users/malindgren/Documents/nsidc_0051'
+# # END TESTING
 
 # read in the FUBU dates for all years
 # handle custom hann

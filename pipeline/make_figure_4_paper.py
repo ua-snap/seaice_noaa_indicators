@@ -26,11 +26,11 @@ if __name__ == '__main__':
 	if window_len == 1:
 		window_len = 'paper_weights'
 
-	# data
-	# window_len = 'paper_weights'
-	# base_path = '/atlas_scratch/malindgren/nsidc_0051'
+	# # TESTING
+	# window_len = '4'
+	# base_path = '/Users/malindgren/Documents/nsidc_0051'
+	# # END TESTING
 
-	# netcdf_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska.nc'
 	netcdf_fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(window_len) )
 	ds = xr.open_dataset( netcdf_fn )
 	a = Affine(*eval( ds.affine_transform )[:6]) # make an affine transform for lookups
@@ -44,14 +44,15 @@ if __name__ == '__main__':
 	rows = [ r for r,c in colrows ]
 
 	# make a climatology
-	clim_fn = os.path.join(base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_paper_weights_climatology.nc')
-	# clim_fn = netcdf_fn.replace( '.nc', '_climatology.nc' )
-	if not os.path.exists( clim_fn ):
-		clim_sel = ds.sel( time=slice('1979','2013') )
-		clim = clim_sel.groupby('time.dayofyear').mean('time')
-		clim.to_netcdf( clim_fn )
-	else:
-		clim = xr.open_dataset( clim_fn )
+	# clim_fn = os.path.join(base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_paper_weights_climatology.nc')
+	clim_fn = netcdf_fn.replace( '.nc', '_climatology.nc' )
+	clim = xr.open_dataset( clim_fn )
+	# if not os.path.exists( clim_fn ):
+	# 	clim_sel = ds.sel( time=slice('1979','2013') )
+	# 	clim = clim_sel.groupby('time.dayofyear').mean('time')
+	# 	clim.to_netcdf( clim_fn )
+	# else:
+	#	clim = xr.open_dataset( clim_fn )
 
 	clim_vals_pts = [ clim.sic[:,r,c].values for c,r in colrows ]
 	clim_vals_mean = np.mean( clim_vals_pts, axis=0 )

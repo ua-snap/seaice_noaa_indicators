@@ -23,13 +23,16 @@ args = parser.parse_args()
 base_path = args.base_path
 window_len = args.window_len
 
+# # TESTING
+# # data
+# window_len = 4
+# base_path = '/Users/malindgren/Documents/nsidc_0051'
+# # END TESTING
+
 # handle custom hann
 if window_len == 1:
 	window_len = 'paper_weights'
 
-# data
-# window_len = 4
-# netcdf_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska.nc'
 netcdf_fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(window_len) )
 ds = xr.open_dataset( netcdf_fn )
 a = Affine(*eval( ds.affine_transform )[:6]) # make an affine transform for lookups
@@ -44,12 +47,13 @@ rows = [r for c,r in colrows]
 
 # make a climatology
 clim_fn = netcdf_fn.replace( '.nc', '_climatology.nc' )
-if not os.path.exists( clim_fn ):
-	clim_sel = ds.sel( time=slice('1978','2013') )
-	clim = clim_sel.groupby('time.dayofyear').mean('time')
-	clim.to_netcdf( clim_fn )
-else:
-	clim = xr.open_dataset( clim_fn )
+clim = xr.open_dataset( clim_fn )
+# if not os.path.exists( clim_fn ):
+# 	clim_sel = ds.sel( time=slice('1978','2013') )
+# 	clim = clim_sel.groupby('time.dayofyear').mean('time')
+# 	clim.to_netcdf( clim_fn )
+# else:
+# 	clim = xr.open_dataset( clim_fn )
 
 for sl in [slice('1982-09-01','1986-09-30'), slice('2007-09-01','2012-09-30')]:
 	ds_sel = ds.sel( time=sl )

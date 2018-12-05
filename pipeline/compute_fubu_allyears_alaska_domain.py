@@ -329,14 +329,17 @@ if __name__ == '__main__':
     if window_len == 1:
         window_len = 'paper_weights'
 
-    # # open the NetCDF that we made...
-    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc' )
-    # ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
+    # # # TESTING
+    # # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # base_path = '/Users/malindgren/Documents/nsidc_0051'
+    # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_4.nc' )
+    # # ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
     # begin = '1979'
     # end = '2017'
-    # ncpus = 64
+    # ncpus = 4
+    # # # END TESTING
 
+    # # open the NetCDF that we made...
     ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
     # slice the data to the full years... currently this is 1979-2016
     ds_sic = ds.sel( time=slice( begin, end ) )['sic']
@@ -372,7 +375,7 @@ if __name__ == '__main__':
     metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
     stacked = { metric:np.array([fubu_years[year][metric] for year in years ]) for metric in metrics }
     ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
-    ds_fubu.to_netcdf( fn.replace('.nc', '_fubu_dates.nc'), format='NETCDF3_64BIT')
+    ds_fubu.to_netcdf( fn.replace('.nc', '_fubu_dates.nc'), format='NETCDF4')
 
     # make averages in ordinal day across all fu/bu
     metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
@@ -401,7 +404,7 @@ if __name__ == '__main__':
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # SOME NOTES ABOUT TRANSLATING FROM MLAB :
     # ----------------------------------------
-    # [ 1 ]: to make an ordinal date that matches the somewhat asinine epoch used by matlab in python
+    # [ 1 ]: to make an ordinal date that matches the epoch used by matlab in python
     # ordinal_date = date.toordinal(date(1971,1,1)) + 366 
     # if not the number will be 366 days off due to the epoch starting January 0, 0000 whereas in Py Jan 1, 0001.
     # [ 2 ]: when computing stdev it is important to set the ddof=1 which is the matlab default.  Python leaves it at 0 default.

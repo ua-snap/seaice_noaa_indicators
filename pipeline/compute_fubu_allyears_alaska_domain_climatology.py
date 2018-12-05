@@ -281,8 +281,8 @@ if __name__ == '__main__':
 
     # # # # # # # # # # # 
     # # open the NetCDF that we made...
-    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_paper_weights_climatology.nc' )
+    # base_path = '/Users/malindgren/Documents/nsidc_0051'
+    # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_4_climatology.nc' )
     # # # # # # # # # # # 
 
     # time is hardwired to a single 'year' to make be able to utilize the same codebase as FUBU all years
@@ -325,7 +325,7 @@ if __name__ == '__main__':
 
     # run it. -- maybe make this parallel?
     f = partial( wrap_fubu, ds_sic=ds_sic, summer_mean=summer_mean, summer_std=summer_std, winter_mean=winter_mean, winter_std=winter_std )
-    pool = mp.Pool( 32 )
+    pool = mp.Pool( ncpus )
     fubu_years = dict(zip(years,pool.map(f, years)))
     pool.close()
     pool.join()

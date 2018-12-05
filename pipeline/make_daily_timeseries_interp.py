@@ -174,7 +174,8 @@ if __name__ == '__main__':
     ncpus = args.ncpus
 
     # # # # # # 
-    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # base_path = '/Users/malindgren/Documents/nsidc_0051'
     # # window_len = 'paper_weights'
     # ncpus = 32
     # window_len = 4
@@ -201,7 +202,10 @@ if __name__ == '__main__':
     da = ds['sic']
 
     # RESAMPLE TO DAILY...
-    da_interp = da.resample(time='1D').interpolate('slinear')
+    dat = da.values.copy()
+    dat[ np.where(dat > 100) ] = np.nan
+    da.data = dat
+    da_interp = da.resample(time='1D').interpolate('linear')
 
     # spatial smoothing...
     # spatially smooth the 2-D daily slices of data using a mean generic filter. (without any aggregation)
@@ -221,6 +225,11 @@ if __name__ == '__main__':
         fsmooth2 = partial( smooth2, window_len=window_len, window='hanning' )
         hanning_smoothed = np.apply_along_axis( fsmooth2, arr=spatial_smoothed, axis=0 )
 
+    # make sure no values < 0, set to 0
+    hanning_smoothed[ np.where(hanning_smoothed < 0) ] = 0
+
+    # make sure no values > 1, set to 1
+    hanning_smoothed[ np.where(hanning_smoothed > 1) ] = 1
 
     # write this out as a GeoTiff
     out_fn = os.path.join( base_path,'GTiff','alaska_singlefile','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}.tif'.format(str(begin.year),str(end.year),window_len) )
@@ -231,7 +240,7 @@ if __name__ == '__main__':
 
     # write it out as a NetCDF
     out_ds = da_interp.copy(deep=True)
-    out_ds.values = hanning_smoothed
+    out_ds.values = hanning_smoothed.astype(np.float32)
     # out_ds = da_interp.to_dataset( name='sic' )
     out_ds = out_ds.to_dataset( name='sic' )
     out_ds.attrs = ds.attrs
@@ -243,7 +252,7 @@ if __name__ == '__main__':
 
     out_fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}.nc'.format(str(begin.year),str(end.year),window_len) )
     _ = make_output_dirs( os.path.dirname(out_fn) )
-    out_ds.to_netcdf( out_fn, format='NETCDF3_64BIT' )
+    out_ds.to_netcdf( out_fn, format='NETCDF4' )
 
 
 

@@ -3,10 +3,10 @@
 # interpolate
 import subprocess, os
 # os.chdir('/Users/malindgren/Documents/repos/seaice_noaa_indicators/pipeline')
-os.chdir('/Users/malindgren/Documents/repos/seaice_noaa_indicators/pipeline')
+os.chdir('/workspace/UA/malindgren/repos/seaice_noaa_indicators/pipeline')
 
-# base_path = '/Users/malindgren/Documents/nsidc_0051'
-base_path = '/Users/malindgren/Documents/nsidc_0051'
+# base_path = '/atlas_scratch/malindgren/nsidc_0051'
+base_path = '/atlas_scratch/malindgren/nsidc_0051'
 ncpus = 4
 
 for window_len in [1,3,4,5,6,7,8,9,10]:
@@ -14,11 +14,11 @@ for window_len in [1,3,4,5,6,7,8,9,10]:
 	_ = subprocess.call(['ipython','make_daily_timeseries_interp.py','--','-b', base_path, '-w', str(window_len)])
 	# make clim
 	if window_len == 1:
-		fn = '/Users/malindgren/Documents/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc'.format(str(window_len))
-		out_fn = '/Users/malindgren/Documents/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_paper_weights_climatology.nc'.format(str(window_len))
+		fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc'.format(str(window_len))
+		out_fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_paper_weights_climatology.nc'.format(str(window_len))
 	else:
-		fn = '/Users/malindgren/Documents/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(str(window_len))
-		out_fn = '/Users/malindgren/Documents/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_{}_climatology.nc'.format(str(window_len))
+		fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(str(window_len))
+		out_fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_{}_climatology.nc'.format(str(window_len))
 
 	begin = '1979'
 	end = '2017'
