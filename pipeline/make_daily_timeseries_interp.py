@@ -209,7 +209,7 @@ if __name__ == '__main__':
 
     # spatial smoothing...
     # spatially smooth the 2-D daily slices of data using a mean generic filter. (without any aggregation)
-    footprint_type = 'rooks'
+    footprint_type = 'queens'
     footprint_lu = {'rooks':np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]]), 
                     'queens':np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])}
 
@@ -220,6 +220,7 @@ if __name__ == '__main__':
         window_len = 'paper_weights'
         # hanning smooth
         hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
+        hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
         hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
         # hanning_smoothed[(da_interp.values > 1) | (da_interp.values < 0)] = da_interp.values[(da_interp.values > 1) | (da_interp.values < 0)]
     else:
