@@ -38,8 +38,10 @@ for window_len in [1,3,4,5,6,7,8,9,10]:
 		fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_paper_weights_climatology.nc' )
 	else:
 		fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_{}_climatology.nc'.format(str(window_len)) )
-
-	_ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain_climatology.py','--','-b', base_path, '-f', fn, '-n', str(ncpus), '-w', str(window_len)])
+	
+	begin = '1979'
+	end = '2013'
+	_ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain.py','--','-b', base_path, '-f', '-begin',begin,'-end',end,fn, '-n', str(ncpus), '-w', str(window_len)])
 	# _ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain.py','--','-b', base_path, '-f', fn, '-w', str(window_len)])
 
 	# plot this stuff.

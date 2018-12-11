@@ -220,7 +220,8 @@ if __name__ == '__main__':
         window_len = 'paper_weights'
         # hanning smooth
         hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
-        hanning_smoothed[(da_interp.values > 1) | (da_interp.values < 0)] = da_interp.values[(da_interp.values > 1) | (da_interp.values < 0)]
+        hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
+        # hanning_smoothed[(da_interp.values > 1) | (da_interp.values < 0)] = da_interp.values[(da_interp.values > 1) | (da_interp.values < 0)]
     else:
         fsmooth2 = partial( smooth2, window_len=window_len, window='hanning' )
         hanning_smoothed = np.apply_along_axis( fsmooth2, arr=spatial_smoothed, axis=0 )

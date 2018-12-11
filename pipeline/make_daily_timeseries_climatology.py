@@ -20,10 +20,10 @@ if __name__ == '__main__':
     end = args.end
 
     # # # # # testing
-    # fn = '/Users/malindgren/Documents/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_4.nc'
-    # out_fn = '/Users/malindgren/Documents/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_4_climatology.nc'
+    # fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_4.nc'
     # begin = '1979'
-    # end = '2017'
+    # end = '2013'
+    # out_fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_4_climatology.nc'.format(begin,end)
     # # # # #
 
     # make climatology --> 0-366 includes leaps

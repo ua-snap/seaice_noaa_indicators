@@ -4,7 +4,7 @@ def show_2D_array_aspatial( arr, output_filename ):
     plt.colorbar( img ) 
     plt.savefig( output_filename )
     plt.close()
-    return output_filename
+    return output_filename  
 
 def convert_ordinalday_year_to_datetime( year, ordinal_day ):
     '''
@@ -99,7 +99,7 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
             if minval > (y - start_ordinalday):
                 out = minval
             else:
-                out = (y - start_ordinalday) # if the date is earlier... make it the later
+                out = (y - start_ordinalday) # if the date is earlier... make it the latter
         else:
             out = -9999
         return out
@@ -119,61 +119,19 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
     return ordinal_days_freezeup_end
 
 
-def freezeup_end_OLD( ds_sic, winter_mean, freezeup_start_arr, year ):
-    ''' find the first instance of sic exceeding the winter mean threshold '''
-
-    if calendar.isleap( int(year) ):
-        start_ordinalday = 244 # this is 9/1 for non-leap year
-    else:
-        start_ordinalday = 245 # this is 9/1 for leap year
-
-    # select the current year values from Sept.1 - Dec.31
-    daily_vals = ds_sic.sel( time=slice(str(year)+'-09-01',str(year)+'-12-31') ).copy()
-
-    # make a mask from the nan's
-    mask = np.isnan( daily_vals.isel( time=0 ).data )
-
-    # remove 10% sic from winter mean values
-    winter_mean_year = winter_mean.sel( year=int(year) ).copy() - .10
-
-    arr = daily_vals >= winter_mean_year
-
-    def last_freezeup( x ):
-        vals, = np.where( x == True )
-        if vals.shape[0] > 0:
-            return vals.min() # grab the first instance
-        else:
-            return -9999
-
-    ordinal_days_freezeup_end_index = np.apply_along_axis( last_freezeup, axis=0, arr=arr ).astype( np.float32 )
-    bad_data_index = ordinal_days_freezeup_end_index != -9999
-    ordinal_days_freezeup_end = np.empty_like( ordinal_days_freezeup_end_index )
-    ordinal_days_freezeup_end[ bad_data_index ] = ordinal_days_freezeup_end_index[ bad_data_index ] + start_ordinalday
-    ordinal_days_freezeup_end[ mask ] = np.nan # mask it
-
-    # get index of locations where freezeup start and end are the same ordinal day
-    end_same_as_start = np.where(ordinal_days_freezeup_end[~mask] == freezeup_start_arr[~mask])
-
-    # # increment our freezeup end values that are the same date as the freezeup start values by 1
-    # update the values where they are the same
-    ordinal_days_freezeup_end[~mask][end_same_as_start] = ordinal_days_freezeup_end[~mask][end_same_as_start] + 1
-
-    # # handle the off-case where we have a -9999 that is outside of the mask.
-    # if np.any(ordinal_days_freezeup_end[~mask] < 0):
-    #   raise ValueError( 'ERROR! -- {}'.format(year) )
-    
-    return ordinal_days_freezeup_end
-
 def breakup_start( ds_sic, winter_mean, winter_std, year ):
     ''' find the day that breakup starts '''
-
+    # % "last day for which previous two weeks are below threshold -2std"
+    import copy
+    
     start_ordinalday = 45 # Feb. 14th per Mark's code -- no leap day math needed. 
 
     # get daily values for the time range in Mark's Algo
     daily_vals = ds_sic.sel( time=slice(str(year)+'-02-14', str(year)+'-08-01') ).copy()
     times,rows,cols = daily_vals.shape
     
-    threshold = (winter_mean.sel( year=int(year) ).copy() - (2*winter_std)).sel( year=int(year) ).copy()
+    threshold = winter_mean.sel( year=int(year) ).copy() - (2*winter_std).sel( year=int(year) ).copy()
+    threshold = threshold.copy( deep=True ) # make sure we dont have a view into anything.
     
     # get a 2D mask, which is common in every layer
     mask = np.isnan( daily_vals.isel(time=0).data )
@@ -184,13 +142,14 @@ def breakup_start( ds_sic, winter_mean, winter_std, year ):
     def wherefirst( x ):
         vals, = np.where( x == True )
         if len(vals) > 0:
-            return vals.min() + 1
+            return vals[~np.isnan(vals)].min()
         else:
             return -9999
 
     # find where the 2week groups are all sic are below the threshold to start breakup
-    twoweek_groups_alltrue = [np.apply_along_axis(alltrue, axis=0, arr=(daily_vals[idx:idx+14,...] < threshold) ) for idx in range(times)]
-    arr = np.array( twoweek_groups_alltrue ) # stack to a 3D array
+    twoweek_groups_alltrue = [np.apply_along_axis(alltrue, axis=0, arr=(daily_vals[idx:idx+14,...] < threshold).values ) for idx in range(times)]
+
+    arr = np.array( copy.deepcopy(twoweek_groups_alltrue) ) # stack to a 3D array
 
     # ordinal_day_first_breakup_twoweeks
     ordinal_days_breakup_start_index = np.apply_along_axis( wherefirst, arr=arr, axis=0 ).astype( np.float32 )
@@ -199,7 +158,7 @@ def breakup_start( ds_sic, winter_mean, winter_std, year ):
     
     ordinal_days_breakup_start = np.copy( ordinal_days_breakup_start_index )
     ordinal_days_breakup_start[ good_data_index ] = ordinal_days_breakup_start_index[ good_data_index ] + start_ordinalday + 14 # for end of 2 weeks....
-    ordinal_days_breakup_start[ mask ] = np.nan # mask it
+    ordinal_days_breakup_start[ mask ] = np.nan # mask it -- this might be able to be lost
 
     # # handle the off-case where we have a -9999 that is outside of the mask.
     # if np.any(ordinal_days_breakup_start[~mask] < 0):
@@ -279,6 +238,17 @@ def make_xarray_dset_years( arr_dict, years, coords, transform ):
                         'year':years }, attrs=attrs )
     return ds
 
+def make_xarray_dset_clim( arr_dict, coords, transform ):
+    ''' make a NetCDF file output computed metrics for FU/BU in a 3-D variable-based way '''
+
+    xc,yc = (coords['xc'], coords['yc'])
+    attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 'affine_transform':transform}
+
+    ds = xr.Dataset({ metric:(['yc', 'xc'], arr_dict[metric].squeeze()) for metric in arr_dict.keys() },
+                coords={'xc': ('xc', xc),
+                        'yc': ('yc', yc)}, attrs=attrs )
+    return ds
+
 def make_xarray_dset_years_levels( arr, years, coords, metrics, transform ):
     ''' make a NetCDF file output computed metrics for FU/BU in a 4-D way '''
 
@@ -325,24 +295,82 @@ if __name__ == '__main__':
     ncpus = args.ncpus
     window_len = args.window_len
 
-    # handle custom hann
-    if window_len == 1:
-        window_len = 'paper_weights'
 
-    # # # TESTING
-    # # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # base_path = '/Users/malindgren/Documents/nsidc_0051'
+    # # # # # # # # TESTING # # # # # # # # # 
+    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # # base_path = '/Users/malindgren/Documents/nsidc_0051'
     # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_4.nc' )
     # # ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
     # begin = '1979'
     # end = '2017'
-    # ncpus = 4
-    # # # END TESTING
+    # ncpus = 32
+    # window_len = 4
+    # # # # # # # # END TESTING # # # # # # # 
+    # # # # # # # # # # # CLIMATOLOGY TESTING
+    # # open the NetCDF that we made...
+    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_4_climatology.nc' )
+    # begin = '2004'
+    # end = '2004'
+    # ncpus = 32
+    # window_len = 4
+    # # # # # # # # # # # END CLIMATOLOGY TESTING
+
+
+    # handle custom hann
+    if window_len == 1:
+        window_len = 'paper_weights'
 
     # # open the NetCDF that we made...
     ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
-    # slice the data to the full years... currently this is 1979-2016
-    ds_sic = ds.sel( time=slice( begin, end ) )['sic']
+    
+    # # --- BELOW
+    
+    # # slice the data to the full years... currently this is 1979-2016
+    # ds_sic = ds.sel( time=slice( begin, end ) )['sic']
+
+    # # --- ABOVE 
+    # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # # 
+    # # --- BELOW [NEW]
+
+    # handle climatology or single year
+    if 'dayofyear' in ds.coords:
+        doy = True
+        if ds.dayofyear.max().data == 366:
+            begin = '2004' # [MOD] can be argparsed
+            end = '2004' # [ MOD] can be argparsed
+        elif ds.dayofyear == 365:
+            begin = begin
+            end = end
+        else:
+            raise BaseException('at least one full year must be used')
+
+        # make a new_ds so we can re-use most of the other fubu computation but on a single 'year' [climatology]
+        # time is hardwired to a single 'year' to make be able to utilize the same codebase as FUBU all years
+        time = pd.date_range('{}-01-01'.format(begin), '{}-12-31'.format(end), freq='D')
+        arr = ds['sic'].values
+        xc = ds.xc.values
+        yc = ds.yc.values
+        transform = '[24877.0390602206, 0.0, -2249452.313150307, 0.0, -24706.883179945104, 1149853.2079733, 0.0, 0.0, 1.0]'
+
+        attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 'affine_transform':transform}
+        ds = xr.Dataset({ 'sic':(['time','yc', 'xc'], arr)},
+                    coords={'xc': ('xc', xc),
+                            'yc': ('yc', yc),
+                            'time':time}, 
+                            attrs=attrs )
+
+        ds_sic = ds['sic']
+        begin, end = 'daily','clim'
+
+    else:
+        doy = False
+        # slice the data to the full years... currently this is 1979-2016
+        ds_sic = ds.sel( time=slice( begin, end ) )['sic']
+    
+    # # --- ABOVE [NEW]
+    # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # # 
+
     years = ds_sic.time.to_index().map(lambda x: x.year).unique().tolist()
 
     # set all nodata pixels to np.nan
@@ -364,7 +392,7 @@ if __name__ == '__main__':
     # run it. -- maybe make this parallel?
     f = partial( wrap_fubu, ds_sic=ds_sic, summer_mean=summer_mean, summer_std=summer_std, winter_mean=winter_mean, winter_std=winter_std )
     pool = mp.Pool( ncpus )
-    fubu_years = dict(zip(years,pool.map(f, years)))
+    fubu_years = dict(zip(years, pool.map(f, years)))
     pool.close()
     pool.join()
 
@@ -374,7 +402,11 @@ if __name__ == '__main__':
     transform = ds.affine_transform
     metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
     stacked = { metric:np.array([fubu_years[year][metric] for year in years ]) for metric in metrics }
-    ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
+    if doy == True:
+        ds_fubu = make_xarray_dset_clim( stacked, ds.coords, transform )
+    else:
+        ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
+    
     ds_fubu.to_netcdf( fn.replace('.nc', '_fubu_dates.nc'), format='NETCDF4')
 
     # make averages in ordinal day across all fu/bu
