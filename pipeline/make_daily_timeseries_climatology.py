@@ -19,12 +19,13 @@ if __name__ == '__main__':
     begin = args.begin
     end = args.end
 
-    # # # # # testing
-    # fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_4.nc'
-    # begin = '1979'
-    # end = '2013'
-    # out_fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_4_climatology.nc'.format(begin,end)
-    # # # # #
+    # for end_year in ['2007','2013','2017']:
+    #     # # # # testing
+    #     fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc'
+    #     begin = '1979'
+    #     end = end_year
+    #     out_fn = '/atlas_scratch/malindgren/nsidc_0051/NetCDF/nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_paper_weights_climatology.nc'.format(begin,end)
+    #     # # # #
 
     # make climatology --> 0-366 includes leaps
     ds = xr.open_dataset( fn ).load()
