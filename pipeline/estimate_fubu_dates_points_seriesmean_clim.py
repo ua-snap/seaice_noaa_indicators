@@ -10,7 +10,7 @@ import datetime
 # setup args
 base_path = '/atlas_scratch/malindgren/nsidc_0051'
 begin = 1979
-end = 2007 # 2013
+end = 2013 # 2013
 fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/NetCDF/nsidc_0051_sic_nasateam_{}-{}_clim_Alaska_hann_smoothed_fubu_dates.nc'.format(begin, end)
 ds = xr.open_dataset(fn)
 	

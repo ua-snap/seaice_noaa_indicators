@@ -8,7 +8,7 @@ from affine import Affine
 import datetime
 
 base_path = '/atlas_scratch/malindgren/nsidc_0051'
-begin, end = (1979,2007) # 2013
+begin, end = (1979,2013) # 2007
 out_dict = {}
 metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end',]
 points_regions = ['barrow', 'chuckchi', 'beaufort', 'chuckchi-beaufort',]
@@ -43,4 +43,4 @@ for points_region in points_regions:
 # dump to disk
 df = pd.DataFrame( out_dict )
 df = df.loc[metrics] # sort the rows?
-df.to_csv('/atlas_scratch/malindgren/nsidc_0051/outputs/csv/fubu_average_date_{}-{}.csv'.format(points_region,begin,end))
+df.to_csv('/atlas_scratch/malindgren/nsidc_0051/outputs/csv/fubu_average_date_{}-{}.csv'.format(begin,end))

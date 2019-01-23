@@ -216,7 +216,7 @@ if __name__ == '__main__':
     footprint = footprint_lu[ footprint_type ]
     spatial_smoothed = np.array(spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus ))
 
-    # hanning smooth
+    # hanning smooth -- we do this 3x according to Mark
     hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
     hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
     hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
