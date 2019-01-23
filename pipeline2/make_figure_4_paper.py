@@ -14,45 +14,44 @@ if __name__ == '__main__':
 
 	# parse some args
 	parser = argparse.ArgumentParser( description='plot fig 4 paper' )
-	parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
-	# parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window length to add to the output NetCDF file name" )
+	parser.add_argument( "-n", "--netcdf_fn", action='store', dest='netcdf_fn', type=str, help="input filename of the NSIDC_0051 smoothed NetCDF file" )
+	parser.add_argument( "-c", "--clim_fn", action='store', dest='clim_fn', type=str, help="input filename of the NSIDC_0051 smoothed climatology NetCDF file" )
+	parser.add_argument( "-f", "--fubu_fn", action='store', dest='fubu_fn', type=str, help="input filename of the computed freeze/break-up dates (FUBU) " )
+	parser.add_argument( "-fc", "--fubu_clim_fn", action='store', dest='fubu_clim_fn', type=str, help="input filename of the computed freeze/break-up dates (FUBU) CLIMATOLOGY file " )
+	parser.add_argument( "-p", "--points_fn", action='store', dest='points_fn', type=str, help="input filename of the points shapefile to use in extraction for plot generation " )
+	parser.add_argument( "-o", "--out_fn", action='store', dest='out_fn', type=str, help="output filename of the plot to be generated -- PNG format" )
 
 	# unpack args
 	args = parser.parse_args()
-	base_path = args.base_path
-	# window_len = args.window_len
+	netcdf_fn = args.netcdf_fn
+	clim_fn = args.clim_fn
+	fubu_fn = args.fubu_fn
+	points_fn = args.points_fn
+	out_fn = args.out_fn
 
-	# # TESTING
-	# # window_len = '4'
-	# base_path = '/atlas_scratch/malindgren/nsidc_0051'
-	# # END TESTING
 
-	# # handle custom hann
-	# if window_len == 1:
-	# 	window_len = 'paper_weights'
+	# # # TESTING
+	netcdf_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc'
+	clim_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1979-2013_Alaska_hann_smoothed_climatology.nc'
+	fubu_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/NetCDF/nsidc_0051_sic_nasateam_1979-2013_Alaska_hann_smoothed_fubu_dates.nc'
+	fubu_clim_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/NetCDF/nsidc_0051_sic_nasateam_1979-2013_clim_Alaska_hann_smoothed_fubu_dates.nc'
+	points_fn = '/atlas_scratch/malindgren/nsidc_0051/selection_points/barrow_points.shp'
+	out_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/png/barrow_avg_fig4.png'
+	# # # 
 
-	netcdf_fn = os.path.join( base_path, 'smoothed', 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc' )
+
 	ds = xr.open_dataset( netcdf_fn )
 	a = Affine(*eval( ds.affine_transform )[:6]) # make an affine transform for lookups
 
 	# make barrow points and get their row/col locs
-	points_fn = os.path.join(base_path,'selection_points','barrow_points.shp')
 	points = gpd.read_file( points_fn ).geometry.apply(lambda x: (x.x, x.y)).tolist()
 	colrows = [ ~a*pt for pt in points ]
 	colrows = [ (int(c),int(r)) for c,r in colrows ]
 	cols = [ c for r,c in colrows ]
 	rows = [ r for r,c in colrows ]
 
-	# make a climatology
-	# clim_fn = os.path.join(base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_paper_weights_climatology.nc')
-	clim_fn = netcdf_fn.replace( '.nc', '_climatology.nc' )
+	# read in climatology
 	clim = xr.open_dataset( clim_fn )
-	# if not os.path.exists( clim_fn ):
-	# 	clim_sel = ds.sel( time=slice('1979','2013') )
-	# 	clim = clim_sel.groupby('time.dayofyear').mean('time')
-	# 	clim.to_netcdf( clim_fn )
-	# else:
-	#	clim = xr.open_dataset( clim_fn )
 
 	clim_vals_pts = [ clim.sic[:,r,c].values for c,r in colrows ]
 	clim_vals_mean = np.mean( clim_vals_pts, axis=0 )
@@ -64,12 +63,12 @@ if __name__ == '__main__':
 		annual_dat = np.mean(hold, axis=0)
 
 		# # # # NEW
-		fubu_fn = os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed_fubu_dates.nc')
+		# fubu_fn = os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed_fubu_dates.nc')
 		fubu_ds = xr.open_dataset( fubu_fn )
 		metrics = [ 'freezeup_start','freezeup_end','breakup_start','breakup_end' ]
 		year = int(sl.start.split('-')[0])
 		yrlu = {'freezeup_start':year,'freezeup_end':year,'breakup_start':year+1,'breakup_end':year+1}
-
+	
 		tmp_vals = []
 		for metric in metrics:
 			year = yrlu[metric]
@@ -89,21 +88,31 @@ if __name__ == '__main__':
 		ind = [j[i] if j.shape[0] > 1 else j[0] for i,j in zip([0,0,1,1],ind) ]
 		fubu_dat[ ind ] = annual_dat[ind]
 
-		# clim
-		os.chdir(os.path.join(base_path, 'outputs', 'GTiff'))
-		with rasterio.open('freezeup_start_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
-			freezeup_begin = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
-		
-		with rasterio.open('freezeup_end_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
-			freezeup_end = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
+		fubu_ds_clim = xr.open_dataset( fubu_clim_fn )
 
-		with rasterio.open('breakup_start_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
-			# arr = rst.read(1)[rows,cols]
-			breakup_begin = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
+		# clim
+		# os.chdir(os.path.join(base_path, 'outputs', 'GTiff'))
+		# with rasterio.open('freezeup_start_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
+		# 	freezeup_begin = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
 		
-		with rasterio.open('breakup_end_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
-			breakup_end = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
+		# with rasterio.open('freezeup_end_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
+		# 	freezeup_end = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
+
+		# with rasterio.open('breakup_start_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
+		# 	# arr = rst.read(1)[rows,cols]
+		# 	breakup_begin = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
 		
+		# with rasterio.open('breakup_end_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
+		# 	breakup_end = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
+		
+
+		fubu_clim_ds = xr.open_dataset( fubu_clim_fn )
+		freezeup_begin = np.nanmean( fubu_clim_ds['freezeup_start'][rows,cols]).round(0).astype(int)
+		freezeup_end = np.nanmean( fubu_clim_ds['freezeup_end'][rows,cols]).round(0).astype(int)
+		breakup_begin = np.nanmean( fubu_clim_ds['breakup_start'][rows,cols]).round(0).astype(int)
+		breakup_end = np.nanmean( fubu_clim_ds['breakup_end'][rows,cols]).round(0).astype(int)
+
+
 		fubu_clim = np.empty_like(clim_vals_mean)
 		fubu_clim[:] = np.nan
 		fubu_clim[ [freezeup_begin,freezeup_end,breakup_begin,breakup_end] ] = clim_vals_mean[[ freezeup_begin,freezeup_end,breakup_begin,breakup_end ]]
@@ -169,6 +178,6 @@ if __name__ == '__main__':
 
 
 		plt.tight_layout()
-		plt.savefig( os.path.join(base_path,'outputs','png','barrow_avg_hann_smoothed_{}-{}.png'.format( sl.start.split('-')[0],sl.stop.split('-')[0])), figsize=(20,2), dpi=300)
+		plt.savefig( out_fn.replace('.png', '_'+'-'.join([sl.start.split('-')[0],sl.stop.split('-')[0]])+'.png' ), figsize=(20,2), dpi=300)
 		plt.cla()
 		plt.close()

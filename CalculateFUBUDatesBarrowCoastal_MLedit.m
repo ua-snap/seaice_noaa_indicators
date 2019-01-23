@@ -284,7 +284,7 @@ set(gca,'xlim',[100 200]);
 set(gca,'ylim',[100 200]);
 line([100 200],[100 200],'Color','k');
 xlabel('observed')
-ylabel('calculated')
+set(get(gca,'YLabel'),'String','');bel('calculated')
 title(['Break Up Coastal 15. R: ' num2str(r(1,2))])
 footer
 

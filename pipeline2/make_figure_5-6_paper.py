@@ -16,22 +16,16 @@ import argparse
 # parse some args
 parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
 parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
-# parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window length to add to the output NetCDF file name" )
 
 # unpack args
 args = parser.parse_args()
 base_path = args.base_path
-# window_len = args.window_len
+
 
 # # TESTING
-# # data
-# # window_len = 4
 # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-# # END TESTING
+# # # #
 
-# # handle custom hann
-# if window_len == 1:
-# 	window_len = 'paper_weights'
 
 netcdf_fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc' )
 ds = xr.open_dataset( netcdf_fn )
@@ -66,7 +60,7 @@ for sl in [slice('1982-09-01','1986-09-30'), slice('2007-09-01','2012-09-30')]:
 	clim_hold = [ clim_repeat_sel[:,r,c].values for c,r in colrows ]
 	clim_mean = np.mean( clim_hold, axis=0 )
 	
-	fubu_fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}_fubu_dates.nc'.format(window_len) )
+	fubu_fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed_fubu_dates.nc' )
 	fubu_ds = xr.open_dataset( fubu_fn )
 	begin_year,end_year = sl.start.split('-')[0], sl.stop.split('-')[0]
 	fubu_ds_sel = fubu_ds.sel(year=slice(begin_year, end_year))
@@ -107,7 +101,7 @@ for sl in [slice('1982-09-01','1986-09-30'), slice('2007-09-01','2012-09-30')]:
 	plt.plot( day_list.values, 'bo' )
 
 	plt.tight_layout()
-	plt.savefig(os.path.join( base_path,'png','barrow_avg_hann_smoothed_{}-{}_fig5-6.png'.format( sl.start.split('-')[0],sl.stop.split('-')[0]) ), dpi=300)
+	plt.savefig(os.path.join( base_path,'outputs','png','barrow_avg_hann_smoothed_{}-{}_fig5-6.png'.format( sl.start.split('-')[0],sl.stop.split('-')[0]) ), dpi=300)
 	plt.cla()
 	plt.close()
 

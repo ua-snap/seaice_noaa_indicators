@@ -17,23 +17,23 @@ if __name__ == '__main__':
 	# parse some args
 	parser = argparse.ArgumentParser( description='plot fig 3 paper' )
 	parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
-	parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window length to add to the output NetCDF file name" )
+	# parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window length to add to the output NetCDF file name" )
 
 	# unpack args
 	args = parser.parse_args()
 	base_path = args.base_path
-	window_len = args.window_len
+	# window_len = args.window_len
 
 	# # # TESTING
-	# window_len = 4
+	# # window_len = 4
 	# base_path = '/Users/malindgren/Documents/nsidc_0051'
 	# # # END TESTING
 
-	# handle custom hann
-	if window_len == 1:
-		window_len = 'paper_weights'
+	# # handle custom hann
+	# if window_len == 1:
+	# 	window_len = 'paper_weights'
 
-	netcdf_fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_{}.nc'.format(window_len))
+	netcdf_fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc' )
 	ds = xr.open_dataset( netcdf_fn )
 	a = Affine(*eval( ds.affine_transform )[:6]) # make an affine transform for lookups
 
@@ -71,6 +71,6 @@ if __name__ == '__main__':
 	clim_mean.plot( kind='line' )
 
 	plt.tight_layout()
-	plt.savefig(os.path.join(base_path, 'png','barrow_avg_hann_{}_fig3.png'.format(window_len)), figsize=(20,2), dpi=300)
+	plt.savefig(os.path.join(base_path, 'png','barrow_avg_hann_smoothed_fig3.png'), figsize=(20,2), dpi=300)
 	plt.cla()
 	plt.close()

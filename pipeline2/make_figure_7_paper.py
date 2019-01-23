@@ -16,22 +16,16 @@ import argparse
 # parse some args
 parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
 parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
-# parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window length to add to the output NetCDF file name" )
 
 # unpack args
 args = parser.parse_args()
 base_path = args.base_path
-# window_len = args.window_len
+
 
 # # TESTING
-# # window_len = 4
 # base_path = '/Users/malindgren/Documents/nsidc_0051'
-# # END TESTING
+# # # #
 
-# # read in the FUBU dates for all years
-# # handle custom hann
-# if window_len == 1:
-# 	window_len = 'paper_weights'
 
 fubu_fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed_fubu_dates.nc' )
 ds = xr.open_dataset( fubu_fn )

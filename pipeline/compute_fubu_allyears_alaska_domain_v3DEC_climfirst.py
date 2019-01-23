@@ -1,4 +1,4 @@
-
+    
 def show_2D_array_aspatial( arr, output_filename ):
     img = plt.imshow( arr, interpolation='nearest' )
     plt.colorbar( img ) 
@@ -22,238 +22,152 @@ def get_winter(month):
 def freezeup_start( ds_sic, summer_mean, summer_std, year ):
     ''' find the first instance of sic exceeding the summer mean + 1 standard deviation threshold '''
 
-    if calendar.isleap( int(year) ):
-        start_ordinalday = 244 # this is 9/1 for non-leap year
-    else:
-        start_ordinalday = 245 # this is 9/1 for leap year
-
-    # the slice to September 1st 'thing' is mapped from Mark's Matlab code. I am choosing to slice to endofyear...
-    # [ML NOTE] -- I think this is hairy and since we do find that there are start days of Sept1, it wont work for all Arctic
+    # slice 9/1 to endofyear...
     daily_vals = ds_sic.sel( time=slice(str(year)+'-09-01', str(year)+'-12-31') ).copy()
-    mean_plus_std = (summer_mean.sel(year=int(year)).copy() + summer_std.sel(year=int(year)).copy())
+    start_ordinalday = int( daily_vals.time.to_index().min().strftime('%j') )
     
-    # copy the 2D data slice for all locations in map and make a lower threshold of .15 or 15% conc
+    # threshold and set minimum value to .15 or 15% conc
+    mean_plus_std = (summer_mean.sel(year=int(year)).copy() + summer_std.sel(year=int(year)).copy())
     threshold = mean_plus_std.data.copy()
     threshold[ threshold < .15 ] = .15
 
     # make a 2D mask of np.nan
     mask = np.isnan( daily_vals.isel( time=0 ).data )
     
-    # when does the daily sic exceed (or is equal-to) the threshold sic
-    arr = daily_vals >= threshold
+    # when does the daily sic exceed the threshold sic
+    arr = (daily_vals > threshold).values
 
-    def first_freezeup( x ):
+    def first_freezeup( x, start_ordinalday ):
         ''' find the first instance of sic exceeding the threshold '''
         vals, = np.where( x == True )
         # get the first one only! for freezeup
-        if vals.shape[0] > 0:
-            return vals.min() + 1 # (+1 to make up for zero anchored index)
+        if len(vals) > 0:
+            return vals.min()+start_ordinalday 
         else:
-            return -9999
+            return np.nan #-9999
 
     # apply through time
-    ordinal_days_freezeup_start_index = np.apply_along_axis( first_freezeup, axis=0, arr=arr ).astype( np.float32 )
-    # add our index to the ordinal day start (Sept.1)
-    bad_data_index = ordinal_days_freezeup_start_index != -9999
-    
-    ordinal_days_freezeup_start = np.empty_like( ordinal_days_freezeup_start_index )
-    ordinal_days_freezeup_start[ bad_data_index ] = ordinal_days_freezeup_start_index[ bad_data_index ] + start_ordinalday
+    ordinal_days_freezeup_start = np.apply_along_axis( first_freezeup, axis=0, arr=arr, \
+                                        start_ordinalday=start_ordinalday ).astype( np.float32 )
     ordinal_days_freezeup_start[ mask ] = np.nan
-    # # handle the off-case where we have a -9999 that is outside of the mask.
-    # if np.any(ordinal_days_freezeup_start[~mask] < 0):
-    #   raise ValueError( 'ERROR! -- {}'.format(year) )
-
     return ordinal_days_freezeup_start
 
 def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
     ''' find the first instance of sic exceeding the winter mean threshold '''
-
-    if calendar.isleap( int(year) ):
-        start_ordinalday = 244 # this is 9/1 for non-leap year
-    else:
-        start_ordinalday = 245 # this is 9/1 for leap year
-
+    
     # select the current year values from Sept.1 - Dec.31
-    daily_vals = ds_sic.sel( time=slice(str(year)+'-09-01',str(year)+'-12-31') ).copy()
+    daily_vals = ds_sic.sel( time=slice(str(year)+'-09-01',str(year)+'-12-31') ).copy(deep=True)
+    start_ordinalday = int( daily_vals.time.to_index().min().strftime('%j') )
     nlayers,nrows,ncols = daily_vals.shape
 
-    # make a mask from the nan's
-    mask = np.isnan( daily_vals.isel( time=0 ).data )
+    # make a np.nan mask
+    mask = np.isnan( daily_vals.isel( time=0 ).values )
 
     # remove 10% sic from winter mean values
-    winter_mean_year = winter_mean.sel( year=int(year) ).copy() - .10
+    threshold = winter_mean.sel( year=int(year) ).copy(deep=True).values - .10
 
-    arr = (daily_vals >= winter_mean_year).data
+    # threshold
+    arr = daily_vals.values > threshold
 
-    # def last_freezeup( x ):
-    #   vals, = np.where( x == True )
-    #   if vals.shape[0] > 0:
-    #       return vals.min() # grab the first instance
-    #   else:
-    #       return -9999
-
-    def last_freezeup( x, y ):
+    def last_freezeup( x, y, start_ordinalday ):
+        ''' determine the last freezeup day and return doy '''
+        # # if (y == -9999) | (np.isnan(y)):
+        # if np.isnan(y):
+        #     out = y
+        # else:
         vals, = np.where( x == True )
-        if (vals.shape[0] > 0) and (y != -9999):
-            minval = vals.min() + 1 # (+1 to make up for zero anchored index)
-            if minval > (y - start_ordinalday):
-                out = minval
-            else:
-                out = (y - start_ordinalday) # if the date is earlier... make it the latter
+        # only consider values that are > the freezeup_start day
+        vals = vals[np.where( (vals+start_ordinalday) > y )]
+        if len(vals) > 0:
+            minval = vals.min()
+            lastfreezeday = (minval+start_ordinalday)
+            if lastfreezeday > y:
+                out = lastfreezeday
+            elif lastfreezeday == y:
+                # if same day, take next day
+                out = lastfreezeday + 1
+            else: #unsolvable
+                out = np.nan #-9999
         else:
-            out = -9999
+            out = np.nan #-9999
         return out
 
-    ordinal_days_freezeup_end_index = np.zeros_like(arr[0,...].astype(np.float32))
+    # find freezeup end date.
+    ordinal_days_freezeup_end = np.zeros_like(arr[0,...].astype(np.float32))
     for i,j in np.ndindex(arr.shape[-2:]):
-        ordinal_days_freezeup_end_index[i,j] = last_freezeup( arr[:,i,j], freezeup_start_arr[i,j] )
+        ordinal_days_freezeup_end[i,j] = last_freezeup( arr[:,i,j], freezeup_start_arr[i,j], start_ordinalday )
 
-    # bad_data_index = ordinal_days_freezeup_end_index != -9999
-    ordinal_days_freezeup_end = ordinal_days_freezeup_end_index + start_ordinalday
-    ordinal_days_freezeup_end[ mask ] = np.nan # mask it
-    
-    # # handle the off-case where we have a -9999 that is outside of the mask.
-    # if np.any(ordinal_days_freezeup_end[~mask] < 0):
-    #   raise ValueError( 'ERROR! -- {}'.format(year) )
-    
-    return ordinal_days_freezeup_end
-
-def freezeup_end2( ds_sic, winter_mean, freezeup_start_arr, year ):
-    ''' find the first instance of sic exceeding the winter mean threshold '''
-
-    if calendar.isleap( int(year) ):
-        start_ordinalday = 244 # this is 9/1 for non-leap year
-    else:
-        start_ordinalday = 245 # this is 9/1 for leap year
-
-    # select the current year values from Sept.1 - Dec.31
-    daily_vals = ds_sic.sel( time=slice(str(year)+'-09-01',str(year)+'-12-31') ).copy()
-    nlayers,nrows,ncols = daily_vals.shape
-
-    # make a mask from the nan's
-    mask = np.isnan( daily_vals.isel( time=0 ).data )
-
-    # remove 10% sic from winter mean values
-    winter_mean_year = winter_mean.sel( year=int(year) ).copy() - .10
-
-    arr = (daily_vals >= winter_mean_year).data
-
-    # def last_freezeup( x ):
-    #   vals, = np.where( x == True )
-    #   if vals.shape[0] > 0:
-    #       return vals.min() # grab the first instance
-    #   else:
-    #       return -9999
-
-    def last_freezeup( x, y ):
-        vals, = np.where( x == True )
-        if (vals.shape[0] > 0) and (y != -9999):
-            minval = vals.min() # + 1 # (+1 to make up for zero anchored index)
-            if minval > (y - start_ordinalday):
-                out = minval
-            else:
-                out = (y - start_ordinalday) # if the date is earlier... make it the latter
-        else:
-            out = -9999
-        return out
-
-    ordinal_days_freezeup_end_index = np.zeros_like(arr[0,...].astype(np.float32))
-    for i,j in np.ndindex(arr.shape[-2:]):
-        ordinal_days_freezeup_end_index[i,j] = last_freezeup( arr[:,i,j], freezeup_start_arr[i,j] )
-
-    # bad_data_index = ordinal_days_freezeup_end_index != -9999
-    ordinal_days_freezeup_end = ordinal_days_freezeup_end_index + start_ordinalday
-    ordinal_days_freezeup_end[ mask ] = np.nan # mask it
-    
-    # # handle the off-case where we have a -9999 that is outside of the mask.
-    # if np.any(ordinal_days_freezeup_end[~mask] < 0):
-    #   raise ValueError( 'ERROR! -- {}'.format(year) )
-    
+    # mask it
+    ordinal_days_freezeup_end[ mask ] = np.nan
     return ordinal_days_freezeup_end
 
 def breakup_start( ds_sic, winter_mean, winter_std, year ):
     ''' find the day that breakup starts '''
     # % "last day for which previous two weeks are below threshold -2std"
-    import copy
     
-    start_ordinalday = 45 # Feb. 14th per Mark's code -- no leap day math needed. 
-
-    # get daily values for the time range in Mark's Algo
-    daily_vals = ds_sic.sel( time=slice(str(year)+'-02-14', str(year)+'-08-01') ).copy()
+    # get daily values for the time range in Mark's Algo (Feb.1 is Feb.14 - 14days search window)
+    daily_vals = ds_sic.sel( time=slice(str(year)+'-02-01', str(year)+'-08-01') ).copy(deep=True)
+    start_ordinalday = int( daily_vals.time.to_index().min().strftime('%j') )
     times,rows,cols = daily_vals.shape
     
-    threshold = winter_mean.sel( year=int(year) ).copy() - (2*winter_std).sel( year=int(year) ).copy()
-    threshold = threshold.copy( deep=True ) # make sure we dont have a view into anything.
-    
-    # get a 2D mask, which is common in every layer
+    # make mask
     mask = np.isnan( daily_vals.isel(time=0).data )
+    
+    # threshold data
+    threshold = (winter_mean - (2*winter_std)).sel(year=int(year)).copy(deep=True)
+    arr = (daily_vals < threshold).values
 
     def alltrue( x ):
-        return x.all()
+        return x.all() # skips np.nan
 
-    def wherefirst( x ):
+    def wherefirst( x, start_ordinalday ):
         vals, = np.where( x == True )
         if len(vals) > 0:
-            return vals[~np.isnan(vals)].min()
+            return vals[~np.isnan(vals)].min() + start_ordinalday
         else:
-            return -9999
+            return np.nan #-9999
 
     # find where the 2week groups are all sic are below the threshold to start breakup
-    twoweek_groups_alltrue = [np.apply_along_axis(alltrue, axis=0, arr=(daily_vals[idx:idx+14,...] < threshold).values ) for idx in range(times)]
+    twoweek_groups_alltrue = [arr[idx-14:idx,...].astype(np.int).sum(axis=0) == 14 for idx in np.arange(times)[14:]]
 
-    arr = np.array( copy.deepcopy(twoweek_groups_alltrue) ) # stack to a 3D array
+    # stack to a 3D array/grab a copy
+    arr = np.array( twoweek_groups_alltrue ).copy()
 
     # ordinal_day_first_breakup_twoweeks
-    ordinal_days_breakup_start_index = np.apply_along_axis( wherefirst, arr=arr, axis=0 ).astype( np.float32 )
-    ordinal_days_breakup_start_index[ mask ] = np.nan # mask it
-    good_data_index = ordinal_days_breakup_start_index != -9999
-    
-    ordinal_days_breakup_start = np.copy( ordinal_days_breakup_start_index )
-    ordinal_days_breakup_start[ good_data_index ] = ordinal_days_breakup_start_index[ good_data_index ] + start_ordinalday + 14 # for end of 2 weeks....
-    ordinal_days_breakup_start[ mask ] = np.nan # mask it -- this might be able to be lost
+    ordinal_days_breakup_start = np.apply_along_axis( wherefirst, arr=arr, axis=0, start_ordinalday=start_ordinalday ).astype( np.float32 )
+    ordinal_days_breakup_start[ mask ] = np.nan # mask it
 
-    # # handle the off-case where we have a -9999 that is outside of the mask.
-    # if np.any(ordinal_days_breakup_start[~mask] < 0):
-    #   raise ValueError( 'ERROR! -- {}'.format(year) )
-        
     return ordinal_days_breakup_start
 
 def breakup_end( ds_sic, summer_mean, summer_std, year ):
-    if calendar.isleap( int(year) ):
-        start_ordinalday = 152 # June 1
-    else:
-        start_ordinalday = 153 # June 1
+    ''' compute the breakup ending date for a give year '''
+    # % find the last day where conc exceeds summer value plus 1std
 
-    daily_vals = ds_sic.sel( time=slice(str(year)+'-06-01', str(year)+'-09-30') ).copy()
+    daily_vals = ds_sic.sel( time=slice(str(year)+'-06-01', str(year)+'-09-30') ).copy(deep=True)
+    start_ordinalday = int( daily_vals.time.to_index().min().strftime('%j') )
 
     # make a mask
-    mask = np.isnan( daily_vals.isel(time=0).data )
+    mask = np.where( np.isnan( daily_vals.isel(time=0).data ) )
 
-    mean_plus_std = (summer_mean.sel(year=int(year)) + summer_std.sel(year=int(year)))
+    mean_plus_std = (summer_mean.copy(deep=True).sel(year=int(year)) + summer_std.copy(deep=True).sel(year=int(year)))
     threshold = mean_plus_std.data.copy()
     threshold[ threshold < .15 ] = .15
 
-    arr = daily_vals < threshold
+    arr = (daily_vals > threshold).values
 
-    def last_breakup( x ):
+    def last_breakup( x, start_ordinalday ):
         ''' find the last instance lessthan below the threshold along time axis '''
         vals, = np.where( np.diff( x.astype(int) ) != 0 )
+
         # add a 1 to the index since it is zero based and we are using it as a way to increment days
         if vals.shape[0] > 0:
-            return vals.max()+1 # get the first one only! for freezeup
+            return vals.max()+start_ordinalday # add ordinal start day to the index
         else:
-            return -9999
+            return np.nan #-9999
 
-    ordinal_days_breakup_end_index = np.apply_along_axis( last_breakup, axis=0, arr=arr ).astype( np.float32 )
-    bad_data_index = ordinal_days_breakup_end_index != -9999
-    
-    ordinal_days_breakup_end = np.copy( ordinal_days_breakup_end_index )
-    ordinal_days_breakup_end[ bad_data_index ] = ordinal_days_breakup_end_index[ bad_data_index ] + start_ordinalday
+    ordinal_days_breakup_end = np.apply_along_axis( last_breakup, axis=0, arr=arr, start_ordinalday=start_ordinalday ).astype( np.float32 )
+    # mask it 
     ordinal_days_breakup_end[ mask ] = np.nan
-
-    # if np.any(ordinal_days_breakup_end[~mask] < 0):
-    #   raise ValueError( 'ERROR! -- {}'.format(year) )
-    
     return ordinal_days_breakup_end
 
 def wrap_fubu( year, ds_sic, summer_mean, summer_std, winter_mean, winter_std ):
@@ -272,8 +186,8 @@ def make_avg_ordinal( fubu, years, metric ):
     '''
     # stack it
     arr = np.array([ fubu_years[year][metric] for year in years ])
-    mask = np.isnan( arr[0] )
-    arr = np.ma.masked_where(arr == -9999, arr, copy=True)
+    mask = np.isnan( arr[0] ).copy()
+    # arr = np.ma.masked_where(arr == -9999, arr, copy=True)
     arr = np.rint( np.ma.mean(arr, axis=0) ).data
     arr[ mask ] = np.nan
     return arr.astype( np.float32 )
@@ -336,7 +250,7 @@ if __name__ == '__main__':
     parser.add_argument( "-begin", "--begin", action='store', dest='begin', type=str, help="beginning year of the climatology" )
     parser.add_argument( "-end", "--end", action='store', dest='end', type=str, help="ending year of the climatology" )
     parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
-    parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window_len value used in hann smoothing" )
+    # parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window_len value used in hann smoothing" )
     
     # unpack the args here...  It is just cleaner to do it this way...
     args = parser.parse_args()
@@ -345,33 +259,34 @@ if __name__ == '__main__':
     begin = args.begin
     end = args.end
     ncpus = args.ncpus
-    window_len = args.window_len
+    # window_len = args.window_len
 
 
-    # # # # # # # # TESTING # # # # # # # # # 
+    # # # # # # # # # TESTING # # # # # # # # # 
     # base_path = '/atlas_scratch/malindgren/nsidc_0051'
     # # base_path = '/Users/malindgren/Documents/nsidc_0051'
-    # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_4.nc' )
+    # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc' )
     # # ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
     # begin = '1979'
-    # end = '2017'
+    # end = '2013'
     # ncpus = 32
-    # window_len = 4
-    # # # # # # # # END TESTING # # # # # # # 
-    # # # # # # # # # # # CLIMATOLOGY TESTING
+    # # window_len = 1
+    # # # # # # END TESTING # # # # # # # 
+    # # # # # # # # # # CLIMATOLOGY TESTING
     # # open the NetCDF that we made...
     # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2017_Alaska_hann_4_climatology.nc' )
+    # fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1979-2013_Alaska_hann_paper_weights_climatology.nc' )
     # begin = '2004'
     # end = '2004'
     # ncpus = 32
-    # window_len = 4
+    # # window_len = 1
     # # # # # # # # # # # END CLIMATOLOGY TESTING
 
+    # # handle custom hann
+    # if window_len == 1:
+    #     window_len = 'paper_weights'
 
-    # handle custom hann
-    if window_len == 1:
-        window_len = 'paper_weights'
+    np.warnings.filterwarnings('ignore') # filter annoying warnings.
 
     # # open the NetCDF that we made...
     ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
@@ -390,7 +305,7 @@ if __name__ == '__main__':
         doy = True
         if ds.dayofyear.max().data == 366:
             begin = '2004' # [MOD] can be argparsed
-            end = '2004' # [ MOD] can be argparsed
+            end = '2004' # [MOD] can be argparsed
         elif ds.dayofyear == 365:
             begin = begin
             end = end
@@ -417,9 +332,10 @@ if __name__ == '__main__':
 
     else:
         doy = False
-        # slice the data to the full years... currently this is 1979-2016
+        # slice the data to the full years... currently this is 1979-20**
         ds_sic = ds.sel( time=slice( begin, end ) )['sic']
     
+    ds_sic = ds_sic.round(4)
     # # --- ABOVE [NEW]
     # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # # 
 
@@ -436,12 +352,12 @@ if __name__ == '__main__':
     winter = ds_sic.sel( time=get_winter( ds_sic[ 'time.month' ] ) )
 
     # get the means and standard deviations of these season aggregates
-    summer_mean = summer.groupby( 'time.year' ).mean( dim='time' )
-    summer_std = summer.groupby( 'time.year' ).std( dim='time', ddof=1 )
-    winter_mean = winter.groupby( 'time.year' ).mean( dim='time' )
-    winter_std = winter.groupby( 'time.year' ).std( dim='time', ddof=1 )
+    summer_mean = summer.groupby( 'time.year' ).mean( dim='time' ).round(4)
+    summer_std = summer.groupby( 'time.year' ).std( dim='time', ddof=1 ).round(4)
+    winter_mean = winter.groupby( 'time.year' ).mean( dim='time' ).round(4)
+    winter_std = winter.groupby( 'time.year' ).std( dim='time', ddof=1 ).round(4)
 
-    # run it. -- maybe make this parallel?
+    # run parallel
     f = partial( wrap_fubu, ds_sic=ds_sic, summer_mean=summer_mean, summer_std=summer_std, winter_mean=winter_mean, winter_std=winter_std )
     pool = mp.Pool( ncpus )
     fubu_years = dict(zip(years, pool.map(f, years)))
@@ -458,8 +374,15 @@ if __name__ == '__main__':
         ds_fubu = make_xarray_dset_clim( stacked, ds.coords, transform )
     else:
         ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
+
+    # # 'nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_paper_weights.nc'
+    # if window_len == 1:
+    #     wl='paper_weights'
+    # else:
+    #     wl=window_len
     
-    ds_fubu.to_netcdf( fn.replace('.nc', '_fubu_dates.nc'), format='NETCDF4')
+    out_fn = os.path.join( base_path, 'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_smoothed_fubu_dates.nc'.format(str(begin), str(end)))
+    ds_fubu.to_netcdf( out_fn, format='NETCDF4')
 
     # make averages in ordinal day across all fu/bu
     metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
@@ -476,7 +399,7 @@ if __name__ == '__main__':
 
     for metric in metrics:
         arr = averages[ metric ]
-        output_filename = os.path.join(base_path,'outputs','{}_avg_{}-{}_ordinal_hann_{}.tif'.format(metric, begin, end, window_len))
+        output_filename = os.path.join(base_path,'outputs', 'GTiff' , '{}_avg_{}-{}_ordinal_hann_smoothed.tif'.format(metric, begin, end))
         dirname = os.path.dirname(output_filename)
         if not os.path.exists(dirname):
             _ = os.makedirs(dirname)

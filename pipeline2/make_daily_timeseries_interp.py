@@ -1,4 +1,7 @@
-# make a full daily array with np.nan array slices at times that are missing and interpolate missing values linearly
+# # # # # # # # # # # # # # # 
+# # make a full daily array with np.nan array slices at times that are missing and interpolate missing values linearly
+# # # # # # # # # # # # # # # 
+
 def nan_helper( y ):
     '''
     Helper to handle indices and logical indices of NaNs.
@@ -113,13 +116,15 @@ def mean_filter_2D( arr, footprint ):
     return generic_filter( arr, np.nanmean, footprint=footprint )
 
 def smooth3( x ):
+    ''' smoothing to mimick the smoothing from meetings with Mark/Hajo'''
     from scipy import signal
     win = np.array([0.25,0.5,0.25])
     return signal.convolve(x, win, mode='same') / sum(win)
 
-# * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-# # hanning smooth the data along the time axis... [check with Mark whether this is correct]
 def smooth2( x, window_len, window ):
+    ''' [ currently unused ]
+    hanning smooth the data along the time axis... this is one of the versions
+    '''
     from scipy import signal
     if window == 'flat': # moving average
         win=np.ones(window_len,'d')
@@ -164,22 +169,17 @@ if __name__ == '__main__':
     # parse some args
     parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
     parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
-    # parser.add_argument( "-w", "--window_len", action='store', dest='window_len', type=int, help="window length to add to the output NetCDF file name" )
     parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
     
     # unpack args
     args = parser.parse_args()
     base_path = args.base_path
-    # window_len = args.window_len
     ncpus = args.ncpus
 
-    # # # # # 
-    base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # base_path = '/Users/malindgren/Documents/nsidc_0051'
-    # window_len = 'paper_weights'
-    ncpus = 32
-    window_len = 4
-    # # # # # 
+    # # # # TESTING
+    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # ncpus = 32
+    # # # # # # 
 
     # list all data
     input_path = os.path.join( base_path,'prepped','alaska' ) # currently set for Alaska-only [watch this]
@@ -216,16 +216,10 @@ if __name__ == '__main__':
     footprint = footprint_lu[ footprint_type ]
     spatial_smoothed = np.array(spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus ))
 
-    # if window_len == 1:
-    #     window_len = 'paper_weights'
     # hanning smooth
     hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
     hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
     hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
-    #     # hanning_smoothed[(da_interp.values > 1) | (da_interp.values < 0)] = da_interp.values[(da_interp.values > 1) | (da_interp.values < 0)]
-    # else:
-    #     fsmooth2 = partial( smooth2, window_len=window_len, window='hanning' )
-    #     hanning_smoothed = np.apply_along_axis( fsmooth2, arr=spatial_smoothed, axis=0 )
 
     # make sure no values < 0, set to 0
     hanning_smoothed[ np.where(hanning_smoothed < 0) ] = 0
@@ -234,7 +228,7 @@ if __name__ == '__main__':
     hanning_smoothed[ np.where(hanning_smoothed > 1) ] = 1
 
     # write this out as a GeoTiff
-    out_fn = os.path.join( base_path,'GTiff','alaska_singlefile','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_smoothed.tif'.format(str(begin.year),str(end.year)) )
+    out_fn = os.path.join( base_path,'smoothed','GTiff','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_smoothed.tif'.format(str(begin.year),str(end.year)) )
     _ = make_output_dirs( os.path.dirname(out_fn) )
     meta.update(count=hanning_smoothed.shape[0])
     with rasterio.open( out_fn, 'w', **meta ) as out:
@@ -243,7 +237,6 @@ if __name__ == '__main__':
     # write it out as a NetCDF
     out_ds = da_interp.copy(deep=True)
     out_ds.values = hanning_smoothed.astype(np.float32)
-    # out_ds = da_interp.to_dataset( name='sic' )
     out_ds = out_ds.to_dataset( name='sic' )
     out_ds.attrs = ds.attrs
 
@@ -252,7 +245,7 @@ if __name__ == '__main__':
     encoding.update({ 'zlib':True, 'comp':5, 'contiguous':False, 'dtype':'float32' })
     out_ds.sic.encoding = encoding
 
-    out_fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_smoothed.nc'.format(str(begin.year),str(end.year)) )
+    out_fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_smoothed.nc'.format(str(begin.year),str(end.year)) )
     _ = make_output_dirs( os.path.dirname(out_fn) )
     out_ds.to_netcdf( out_fn, format='NETCDF4' )
 
