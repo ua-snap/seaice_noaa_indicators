@@ -14,25 +14,36 @@ import rasterio, os, calendar, datetime
 import argparse
 
 # parse some args
-parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
-parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
+parser = argparse.ArgumentParser( description='plot figs 5/6 paper' )
+parser.add_argument( "-n", "--netcdf_fn", action='store', dest='netcdf_fn', type=str, help="input filename of the NSIDC_0051 smoothed NetCDF file" )
+parser.add_argument( "-c", "--clim_fn", action='store', dest='clim_fn', type=str, help="input filename of the NSIDC_0051 smoothed climatology NetCDF file" )
+parser.add_argument( "-f", "--fubu_fn", action='store', dest='fubu_fn', type=str, help="input filename of the computed freeze/break-up dates (FUBU) " )
+parser.add_argument( "-p", "--points_fn", action='store', dest='points_fn', type=str, help="input filename of the points shapefile to use in extraction for plot generation " )
+parser.add_argument( "-o", "--out_fn", action='store', dest='out_fn', type=str, help="output filename of the plot to be generated -- PNG format" )
+
 
 # unpack args
 args = parser.parse_args()
-base_path = args.base_path
+netcdf_fn = args.netcdf_fn
+clim_fn = args.clim_fn
+fubu_fn = args.fubu_fn
+points_fn = args.points_fn
+out_fn = args.out_fn
 
+# # # TESTING
+# netcdf_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc'
+# clim_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1979-2013_Alaska_hann_smoothed_climatology.nc'
+# fubu_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/NetCDF/nsidc_0051_sic_nasateam_1979-2013_Alaska_hann_smoothed_fubu_dates.nc'
+# points_fn = '/atlas_scratch/malindgren/nsidc_0051/selection_points/chuckchi-barrow-beaufort_points.shp'
+# out_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/png/chuckchi-barrow-beaufort_avg_fig5-6.png'
+# # # # # # #
 
-# # TESTING
-# base_path = '/atlas_scratch/malindgren/nsidc_0051'
-# # # #
-
-
-netcdf_fn = os.path.join( base_path, 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc' )
+# netcdf_fn = os.path.join( base_path, 'smoothed', 'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc' )
 ds = xr.open_dataset( netcdf_fn )
 a = Affine(*eval( ds.affine_transform )[:6]) # make an affine transform for lookups
 
 # make barrow points and get their row/col locs
-points_fn = os.path.join( base_path,'selection_points','barrow_points.shp' )
+# points_fn = os.path.join( base_path,'selection_points','barrow_points.shp' )
 points = gpd.read_file( points_fn ).geometry.apply(lambda x: (x.x, x.y)).tolist()
 colrows = [ ~a*pt for pt in points ]
 colrows = [ (int(c),int(r)) for c,r in colrows ]
@@ -40,14 +51,7 @@ cols = [c for c,r in colrows]
 rows = [r for c,r in colrows]
 
 # make a climatology
-clim_fn = netcdf_fn.replace( '.nc', '_climatology.nc' )
 clim = xr.open_dataset( clim_fn )
-# if not os.path.exists( clim_fn ):
-# 	clim_sel = ds.sel( time=slice('1978','2013') )
-# 	clim = clim_sel.groupby('time.dayofyear').mean('time')
-# 	clim.to_netcdf( clim_fn )
-# else:
-# 	clim = xr.open_dataset( clim_fn )
 
 for sl in [slice('1982-09-01','1986-09-30'), slice('2007-09-01','2012-09-30')]:
 	ds_sel = ds.sel( time=sl )
@@ -60,7 +64,6 @@ for sl in [slice('1982-09-01','1986-09-30'), slice('2007-09-01','2012-09-30')]:
 	clim_hold = [ clim_repeat_sel[:,r,c].values for c,r in colrows ]
 	clim_mean = np.mean( clim_hold, axis=0 )
 	
-	fubu_fn = os.path.join( base_path,'NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed_fubu_dates.nc' )
 	fubu_ds = xr.open_dataset( fubu_fn )
 	begin_year,end_year = sl.start.split('-')[0], sl.stop.split('-')[0]
 	fubu_ds_sel = fubu_ds.sel(year=slice(begin_year, end_year))
@@ -83,7 +86,6 @@ for sl in [slice('1982-09-01','1986-09-30'), slice('2007-09-01','2012-09-30')]:
 	day_list = day_list.loc[sl.start:sl.stop]
 	day_list[:] = np.nan
 
-	# out = []
 	for dt,df in day_list.groupby( pd.Grouper(freq='Y') ):
 		year = dt.year
 		for metric in metrics:
@@ -101,7 +103,9 @@ for sl in [slice('1982-09-01','1986-09-30'), slice('2007-09-01','2012-09-30')]:
 	plt.plot( day_list.values, 'bo' )
 
 	plt.tight_layout()
-	plt.savefig(os.path.join( base_path,'outputs','png','barrow_avg_hann_smoothed_{}-{}_fig5-6.png'.format( sl.start.split('-')[0],sl.stop.split('-')[0]) ), dpi=300)
+	# output naming
+	out_fn = out_fn.replace('.png', '_{}-{}.png'.format(sl.start.split('-')[0],sl.stop.split('-')[0]))
+	plt.savefig( out_fn, dpi=300)
 	plt.cla()
 	plt.close()
 

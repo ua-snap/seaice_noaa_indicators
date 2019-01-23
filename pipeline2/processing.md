@@ -28,5 +28,10 @@
 	--- generate a plot that is similar in look and feel to the plot 3 from the paper for comparison of methods employed.
 
 9. make_figure_4_paper.py
-	--- generate plot to mimick (somewhat) the plot 4 from teh paper for comparison.
+	--- generate plot to mimick (somewhat) the plot 4 from the paper for comparison.
 
+10. make_figure_5-6_paper.py
+	--- generate plot to mimick (somewhat) the plots 5 and 6 from the paper for comparison.
+
+11. make_figure_7_paper.py
+	--- generate plot to mimick (somewhat) the plot 7 from the paper for comparison.

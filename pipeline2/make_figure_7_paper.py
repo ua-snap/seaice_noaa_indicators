@@ -11,28 +11,33 @@ import geopandas as gpd
 from affine import Affine
 import numpy as np
 import rasterio, os, calendar, datetime
+import seaborn as sns
 import argparse
 
 # parse some args
-parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
-parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
+parser = argparse.ArgumentParser( description='plot fig 7 paper' )
+parser.add_argument( "-f", "--fubu_fn", action='store', dest='fubu_fn', type=str, help="input filename of the computed freeze/break-up dates (FUBU) " )
+parser.add_argument( "-p", "--points_fn", action='store', dest='points_fn', type=str, help="input filename of the points shapefile to use in extraction for plot generation " )
+parser.add_argument( "-o", "--out_fn", action='store', dest='out_fn', type=str, help="output filename of the plot to be generated -- PNG format" )
 
 # unpack args
 args = parser.parse_args()
-base_path = args.base_path
+fubu_fn = args.fubu_fn
+points_fn = args.points_fn
+out_fn = args.out_fn
 
 
-# # TESTING
-# base_path = '/Users/malindgren/Documents/nsidc_0051'
-# # # #
+# # # TESTING
+# fubu_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/NetCDF/nsidc_0051_sic_nasateam_1979-2013_Alaska_hann_smoothed_fubu_dates.nc'
+# points_fn = '/atlas_scratch/malindgren/nsidc_0051/selection_points/chuckchi_points.shp'
+# out_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/png/chuckchi_avg_fig7.png'
+# # # # #
 
 
-fubu_fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed_fubu_dates.nc' )
 ds = xr.open_dataset( fubu_fn )
 a = Affine(*eval( ds.affine_transform )[:6]) # make an affine transform for lookups
 
 # make barrow points and get their row/col locs
-points_fn = os.path.join(base_path,'selection_points','barrow_points.shp')
 points = gpd.read_file( points_fn ).geometry.apply(lambda x: (x.x, x.y)).tolist()
 colrows = [ ~a*pt for pt in points ]
 colrows = [ (int(c),int(r)) for c,r in colrows ]
@@ -51,14 +56,15 @@ df.columns = metrics
 df[ (df < 0) ] = np.nan
 
 # plot FUBU
-# df.reset_index('year')
-metric_groups = [[ 'freezeup_start','freezeup_end'],['breakup_start','breakup_end' ]]
+metric_groups = [ ['freezeup_start','freezeup_end'],['breakup_start','breakup_end'] ]
 for group in metric_groups:
 	start, end = group
 	dat = df.loc[:,[start,end]]
-	import seaborn as sns
+	
 	melted = dat.reset_index().melt(id_vars='year')
-	sns.lmplot(x='year', y="value", hue="variable", data=melted)
+	melted.columns = [ i if i != 'value' else 'day of year' for i in melted.columns ]
+	melted.columns = [ i if i != 'variable' else ' ' for i in melted.columns ]
+	sns.lmplot(x='year', y="day of year", hue=" ", data=melted)
 
 	# ax = dat.plot(kind='line',linestyle="none", marker='o')
 	# # trendlines?
@@ -68,8 +74,8 @@ for group in metric_groups:
 	# trend.index = dat.index
 
 	# trend.plot(kind='line', ax=ax)
-
-	plt.savefig( os.path.join(base_path, 'outputs', 'png','barrow_avg_hann_smoothed_{}-{}_fig7a.png'.format(start, end)), figsize=(20,2), dpi=300)
+	out_fn2 = out_fn.replace('.png','_{}.png'.format(start.split('_')[0]))
+	plt.savefig( out_fn2, figsize=(20,2), dpi=300)
 	plt.cla()
 	plt.close()
 
