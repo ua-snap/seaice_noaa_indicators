@@ -1,4 +1,3 @@
-    
 def show_2D_array_aspatial( arr, output_filename ):
     img = plt.imshow( arr, interpolation='nearest' )
     plt.colorbar( img ) 
@@ -19,6 +18,12 @@ def get_summer(month):
 def get_winter(month):
     return (month == 1) | (month == 2)
 
+def rolling_window(a, window):
+    ''' borrowed from http://www.rigtorp.se/2011/01/01/rolling-statistics-numpy.html '''
+    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
+    strides = a.strides + (a.strides[-1],)
+    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+
 def freezeup_start( ds_sic, summer_mean, summer_std, year ):
     ''' find the first instance of sic exceeding the summer mean + 1 standard deviation threshold '''
 
@@ -35,7 +40,7 @@ def freezeup_start( ds_sic, summer_mean, summer_std, year ):
     mask = np.isnan( daily_vals.isel( time=0 ).data )
     
     # when does the daily sic exceed the threshold sic
-    arr = (daily_vals > threshold).values
+    arr = (daily_vals >= threshold).values
 
     def first_freezeup( x, start_ordinalday ):
         ''' find the first instance of sic exceeding the threshold '''
@@ -64,17 +69,13 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
     mask = np.isnan( daily_vals.isel( time=0 ).values )
 
     # remove 10% sic from winter mean values
-    threshold = winter_mean.sel( year=int(year) ).copy(deep=True).values - .10
+    threshold = winter_mean.sel(year=int(year)+1).copy(deep=True).values - .10
 
     # threshold
-    arr = daily_vals.values > threshold
+    arr = daily_vals.values >= threshold
 
     def last_freezeup( x, y, start_ordinalday ):
         ''' determine the last freezeup day and return doy '''
-        # # if (y == -9999) | (np.isnan(y)):
-        # if np.isnan(y):
-        #     out = y
-        # else:
         vals, = np.where( x == True )
         # only consider values that are > the freezeup_start day
         vals = vals[np.where( (vals+start_ordinalday) > y )]
@@ -101,13 +102,14 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
     ordinal_days_freezeup_end[ mask ] = np.nan
     return ordinal_days_freezeup_end
 
-def breakup_start( ds_sic, winter_mean, winter_std, year ):
+def breakup_start( ds_sic, winter_mean, winter_std, summer_mean, year ):
     ''' find the day that breakup starts '''
     # % "last day for which previous two weeks are below threshold -2std"
     
     # get daily values for the time range in Mark's Algo (Feb.1 is Feb.14 - 14days search window)
     daily_vals = ds_sic.sel( time=slice(str(year)+'-02-01', str(year)+'-08-01') ).copy(deep=True)
-    start_ordinalday = int( daily_vals.time.to_index().min().strftime('%j') )
+    start_ordinalday = int( daily_vals.time.to_index().min().strftime('%j') ) + 13
+    end_ordinalday = int(pd.Timestamp.strptime(str(year)+'-08-01', '%Y-%m-%d').strftime('%j')) # 8/1
     times,rows,cols = daily_vals.shape
     
     # make mask
@@ -115,7 +117,7 @@ def breakup_start( ds_sic, winter_mean, winter_std, year ):
     
     # threshold data
     threshold = (winter_mean - (2*winter_std)).sel(year=int(year)).copy(deep=True)
-    arr = (daily_vals < threshold).values
+    arr = (daily_vals > threshold).values
 
     def alltrue( x ):
         return x.all() # skips np.nan
@@ -123,12 +125,12 @@ def breakup_start( ds_sic, winter_mean, winter_std, year ):
     def wherefirst( x, start_ordinalday ):
         vals, = np.where( x == True )
         if len(vals) > 0:
-            return vals[~np.isnan(vals)].min() + start_ordinalday
+            return vals[~np.isnan(vals)].max() + start_ordinalday
         else:
             return np.nan #-9999
 
     # find where the 2week groups are all sic are below the threshold to start breakup
-    twoweek_groups_alltrue = [arr[idx-14:idx,...].astype(np.int).sum(axis=0) == 14 for idx in np.arange(times)[14:]]
+    twoweek_groups_alltrue = [arr[idx-14:idx,...].all(axis=0) for idx in np.arange(times)[14:]]
 
     # stack to a 3D array/grab a copy
     arr = np.array( twoweek_groups_alltrue ).copy()
@@ -137,19 +139,31 @@ def breakup_start( ds_sic, winter_mean, winter_std, year ):
     ordinal_days_breakup_start = np.apply_along_axis( wherefirst, arr=arr, axis=0, start_ordinalday=start_ordinalday ).astype( np.float32 )
     ordinal_days_breakup_start[ mask ] = np.nan # mask it
 
+    # other conditions from the old code:
+    #  if summer means are greater than 40% we are making it NO BREAKUP
+    summer = summer_mean.sel(year=int(year)).copy(deep=True)
+    ordinal_days_breakup_start[ np.where(summer > .40) ] = np.nan
+
+    # if the day chosen is the last day of the time window, make it NA
+    ordinal_days_breakup_start[ ordinal_days_breakup_start + 1 == end_ordinalday ] = np.nan
     return ordinal_days_breakup_start
 
 def breakup_end( ds_sic, summer_mean, summer_std, year ):
     ''' compute the breakup ending date for a give year '''
     # % find the last day where conc exceeds summer value plus 1std
 
-    daily_vals = ds_sic.sel( time=slice(str(year)+'-06-01', str(year)+'-09-30') ).copy(deep=True)
+    # daily_vals = ds_sic.sel( time=slice(str(year)+'-06-01', str(year)+'-09-30') ).copy(deep=True)
+    daily_vals = ds_sic.sel( time=slice(str(year)+'-06-01', str(year)+'-10-01') ).copy(deep=True)
     start_ordinalday = int( daily_vals.time.to_index().min().strftime('%j') )
+    # handle potential case of end_year not included in input series
+    # end_ordinalday = int(pd.Timestamp.strptime(str(year)+'-09-30', '%Y-%m-%d').strftime('%j')) # 9/30
+    end_ordinalday = int(pd.Timestamp.strptime(str(year)+'-10-01', '%Y-%m-%d').strftime('%j'))
 
     # make a mask
     mask = np.where( np.isnan( daily_vals.isel(time=0).data ) )
 
-    mean_plus_std = (summer_mean.copy(deep=True).sel(year=int(year)) + summer_std.copy(deep=True).sel(year=int(year)))
+    summer = summer_mean.sel(year=int(year)).copy(deep=True)
+    mean_plus_std = summer + summer_std.copy(deep=True).sel(year=int(year))
     threshold = mean_plus_std.data.copy()
     threshold[ threshold < .15 ] = .15
 
@@ -157,7 +171,7 @@ def breakup_end( ds_sic, summer_mean, summer_std, year ):
 
     def last_breakup( x, start_ordinalday ):
         ''' find the last instance lessthan below the threshold along time axis '''
-        vals, = np.where( np.diff( x.astype(int) ) != 0 )
+        vals, = np.where( x == True )
 
         # add a 1 to the index since it is zero based and we are using it as a way to increment days
         if vals.shape[0] > 0:
@@ -166,14 +180,26 @@ def breakup_end( ds_sic, summer_mean, summer_std, year ):
             return np.nan #-9999
 
     ordinal_days_breakup_end = np.apply_along_axis( last_breakup, axis=0, arr=arr, start_ordinalday=start_ordinalday ).astype( np.float32 )
+
+    # if the summer mean is greater than 25% make it NA
+    ordinal_days_breakup_end[ summer.values > .25 ] = np.nan
+
+    # if it is the last day of the time-window, (sept.30th) make it NA
+    ordinal_days_breakup_end[ ordinal_days_breakup_end >= end_ordinalday ] = np.nan
+    
     # mask it 
     ordinal_days_breakup_end[ mask ] = np.nan
+
     return ordinal_days_breakup_end
 
 def wrap_fubu( year, ds_sic, summer_mean, summer_std, winter_mean, winter_std ):
+    '''
+    wrapper function to run an entire year in one process
+    * this is mainly used as a wrapper function for multiprocessing.
+    '''
     freezeup_start_arr = freezeup_start( ds_sic, summer_mean, summer_std, year )
     freezeup_end_arr = freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year )
-    breakup_start_arr = breakup_start( ds_sic, winter_mean, winter_std, year )
+    breakup_start_arr = breakup_start( ds_sic, winter_mean, winter_std, summer_mean, year )
     breakup_end_arr = breakup_end( ds_sic, summer_mean, summer_std, year )
     return {'freezeup_start':freezeup_start_arr, 'freezeup_end':freezeup_end_arr, 
             'breakup_start':breakup_start_arr, 'breakup_end':breakup_end_arr }
@@ -184,6 +210,7 @@ def make_avg_ordinal( fubu, years, metric ):
     [ NOTE ]: we are masking the -9999 values for these computations...  which will 
                 most likely need to change for proper use.
     '''
+
     # stack it
     arr = np.array([ fubu_years[year][metric] for year in years ])
     mask = np.isnan( arr[0] ).copy()
@@ -259,14 +286,13 @@ if __name__ == '__main__':
     end = args.end
     ncpus = args.ncpus
     
-
-    # # # # # # # # # TESTING # # # # # # # # # 
-    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
+    # # # # # # # # # # TESTING # # # # # # # # # 
+    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
     # fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc' )
     # begin = '1979'
-    # end = '2013'
-    # ncpus = 32
-    # # # # # # # # END TESTING # # # # # # # 
+    # end = '2017'
+    # ncpus = 64
+    # # # # # # # # # END TESTING # # # # # # # 
     
     # # # # # # # # CLIMATOLOGY TESTING
     # # open the NetCDF that we made...
@@ -277,17 +303,13 @@ if __name__ == '__main__':
     # ncpus = 32
     # # # # # # # # # # # END CLIMATOLOGY TESTING
 
-
     # # # # # # # # TESTING # # # # # # # # # 
     base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
     fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/mark_test_data_march2019/nsidc_0051_sic_nasateam_1978-2013_Alaska_testcase_oldseries.nc'
     begin = '1979'
-    end = '2012'
+    end = '2013'
     ncpus = 32
     # # # # # # # END TESTING # # # # # # # 
-    
-
-
 
     np.warnings.filterwarnings('ignore') # filter annoying warnings.
 
@@ -330,11 +352,9 @@ if __name__ == '__main__':
         # slice the data to the full years... currently this is 1979-20**
         ds_sic = ds.sel( time=slice( begin, end ) )['sic']
         suffix = '' # empty
-
-    ds_sic = ds_sic.round(4)
     
     # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # # 
-    years = ds_sic.time.to_index().map(lambda x: x.year).unique().tolist()
+    years = ds_sic.time.to_index().map(lambda x: x.year).unique().tolist()[:-1] # cant compute last year
 
     # set all nodata pixels to np.nan
     ds_sic.data[ ds_sic.data > 1 ] = np.nan
@@ -352,12 +372,51 @@ if __name__ == '__main__':
     winter_mean = winter.groupby( 'time.year' ).mean( dim='time' ).round(4)
     winter_std = winter.groupby( 'time.year' ).std( dim='time', ddof=1 ).round(4)
 
+    # def add_inital_empty_year(seasonal):
+    #     if 1978 not in seasonal.year:
+    #         # add_empty_1978
+    #         tmp = seasonal.isel(year=0)
+    #         tmp[:] = np.nan
+    #         tmp['year'] = 1978
+    #         out = xr.concat([tmp.to_dataset(),seasonal.to_dataset()], dim='year')
+    #     else:
+    #         out = seasonal
+    #     return out
+ 
+    # # update the data to start with a full year if it is needed. this makes the subsequent code less bulky
+    # seasonals = {name:add_inital_empty_year(seasonal) for name,seasonal in zip(['summer_mean','summer_std','winter_mean','winter_std'],[summer_mean, summer_std, winter_mean, winter_std])}
+    # summer_mean = seasonals['summer_mean']['sic']
+    # summer_std = seasonals['summer_std']['sic']
+    # winter_mean = seasonals['winter_mean']['sic']
+    # winter_std = seasonals['winter_std']['sic']
+
     # run parallel
     f = partial( wrap_fubu, ds_sic=ds_sic, summer_mean=summer_mean, summer_std=summer_std, winter_mean=winter_mean, winter_std=winter_std )
     pool = mp.Pool( ncpus )
     fubu_years = dict(zip(years, pool.map(f, years)))
     pool.close()
     pool.join()
+
+    # # # # # TEST 
+    # quick and dirty data frame
+    def convert_time( x ):
+        if x[1] != 'nan':
+            out = pd.Timestamp.strptime(''.join(x.tolist()).split('.')[0], '%Y%j')
+            out = out.strftime('%Y-%m-%d')
+        else:
+            out = '0000'
+        return out
+
+    metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
+    test = pd.DataFrame({i:{j:fubu_years[i][j][0][0] for j in fubu_years[i]} for i in fubu_years}).T
+    # new = test.breakup_start.reset_index().astype(str).apply(lambda x: convert_time(x), axis=1)
+    new = pd.DataFrame({i:test[i].reset_index().astype(str).apply(lambda x: convert_time(x), axis=1) for i in metrics} )
+    new.index=test.index
+    new = new[['freezeup_start','freezeup_end','breakup_start','breakup_end']]
+    new.to_csv('/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/app_data/barrow_fubu_dates_michael_nosmooth.csv')
+    # new.index = test.index
+    # new.to_dict()
+    # # # END
 
     # # make NC file with metric outputs as variables and years as the time dimension
     # # --------- --------- --------- --------- --------- --------- --------- ---------

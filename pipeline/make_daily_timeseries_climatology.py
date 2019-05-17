@@ -20,10 +20,10 @@ if __name__ == '__main__':
     # # begin = args.begin
     # # end = args.end
 
-    # # # # testing
-    fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc'
-    dirname, basename = os.path.split(fn)
-    # # # # # # # #
+    # # # # # testing
+    # fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc'
+    # dirname, basename = os.path.split(fn)
+    # # # # # # # # #
 
     for end_year in ['2007','2013','2017']:
         # hardwired arguments for some climatology needs.

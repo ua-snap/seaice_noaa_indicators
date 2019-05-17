@@ -1,6 +1,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 #     make the figure 4/5 from Hajo and Marks paper.
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
 if __name__ == '__main__':
 	import matplotlib
 	matplotlib.use('agg')
@@ -88,23 +89,7 @@ if __name__ == '__main__':
 		ind = [j[i] if j.shape[0] > 1 else j[0] for i,j in zip([0,0,1,1],ind) ]
 		fubu_dat[ ind ] = annual_dat[ind]
 
-		fubu_ds_clim = xr.open_dataset( fubu_clim_fn )
-
-		# clim
-		# os.chdir(os.path.join(base_path, 'outputs', 'GTiff'))
-		# with rasterio.open('freezeup_start_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
-		# 	freezeup_begin = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
-		
-		# with rasterio.open('freezeup_end_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
-		# 	freezeup_end = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
-
-		# with rasterio.open('breakup_start_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
-		# 	# arr = rst.read(1)[rows,cols]
-		# 	breakup_begin = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
-		
-		# with rasterio.open('breakup_end_avg_allyears_ordinal_hann_smoothed_climatology.tif') as rst:
-		# 	breakup_end = np.nanmean(rst.read(1)[rows,cols]).round(0).astype(int)
-		
+		# fubu_ds_clim = xr.open_dataset( fubu_clim_fn )
 
 		fubu_clim_ds = xr.open_dataset( fubu_clim_fn )
 		freezeup_begin = np.nanmean( fubu_clim_ds['freezeup_start'][rows,cols]).round(0).astype(int)
@@ -112,13 +97,11 @@ if __name__ == '__main__':
 		breakup_begin = np.nanmean( fubu_clim_ds['breakup_start'][rows,cols]).round(0).astype(int)
 		breakup_end = np.nanmean( fubu_clim_ds['breakup_end'][rows,cols]).round(0).astype(int)
 
-
 		fubu_clim = np.empty_like(clim_vals_mean)
 		fubu_clim[:] = np.nan
 		fubu_clim[ [freezeup_begin,freezeup_end,breakup_begin,breakup_end] ] = clim_vals_mean[[ freezeup_begin,freezeup_end,breakup_begin,breakup_end ]]
 
 
-		# # # NEW
 		# PLOT FUBU CLIMATOLOGY
 		# FU-BEGIN
 		fubu_clim_fu_begin = np.empty_like(clim_vals_mean)
@@ -140,6 +123,7 @@ if __name__ == '__main__':
 		# # # PLOT FUBU FROM THE DATA SERIES SHOWN
 
 		freezeup_begin,freezeup_end,breakup_begin,breakup_end = ind
+		# FU-BEGIN
 		fubu_dat = np.empty_like( annual_dat )
 		fubu_dat_fu_begin = np.empty_like(annual_dat)
 		fubu_dat_fu_begin[:] = np.nan
@@ -156,41 +140,37 @@ if __name__ == '__main__':
 		fubu_dat_bu_end = np.empty_like(annual_dat)
 		fubu_dat_bu_end[:] = np.nan
 		fubu_dat_bu_end[breakup_end] = annual_dat[breakup_end]
-		# # # END
 
-		# [TEST]
+
+		# PLOTTING
 		fig,ax = plt.subplots(figsize=(10, 4))
-		# plt.figure(figsize=(10, 4))
+
 		# plot the 'annual' data
 		ax.plot( annual_dat )
 		xindex = ds_sel.time.to_index()
 		months_lookup = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
 		xindex_months = np.array([ months_lookup[i.month] for i in xindex ])
-		# xindex_months.append( months_lookup[xindex[-1].month] )
-		# do it the hard way
+		# do it the hard way --hacky...
 		new_ticks = np.arange( 1, len(annual_dat), 70)
 		new_labels = xindex_months[new_ticks]
 
 		ax.set_xticklabels( new_labels )
 		ax.set_ylabel( 'Sea Ice Concentration' )
-		# [end test]
 
 		# plot extended climatology
 		ax.plot( clim_new[244:-122] )
-		# # NEW
-		ax.plot( np.concatenate([fubu_clim_fu_begin,fubu_clim_fu_begin])[244:-122], 'bs' )
+		# plot fubu markers clim
+		ax.plot( np.concatenate([fubu_clim_fu_begin,fubu_clim_fu_begin])[244:-122], 'bs')
 		ax.plot( np.concatenate([fubu_clim_fu_end,fubu_clim_fu_end])[244:-122], 'bs' )
 		ax.plot( np.concatenate([fubu_clim_bu_begin,fubu_clim_bu_begin])[244:-122], 'rs' )
 		ax.plot( np.concatenate([fubu_clim_bu_end,fubu_clim_bu_end])[244:-122], 'rs' )
-		# # END
+	
 
-		# plt.plot( np.concatenate([fubu_clim,fubu_clim])[244:-122], 'bo' )
-		# plt.plot( fubu_dat, 'ro')
+		# plot fubu from data series
 		ax.plot( fubu_dat_fu_begin, marker='s', fillstyle='none', color='blue')
 		ax.plot( fubu_dat_fu_end, marker='s', fillstyle='none', color='blue')
 		ax.plot( fubu_dat_bu_begin, marker='s', fillstyle='none', color='red')
 		ax.plot( fubu_dat_bu_end, marker='s', fillstyle='none', color='red')
-
 
 		plt.tight_layout()
 		plt.savefig( out_fn.replace('.png', '_'+'-'.join([sl.start.split('-')[0],sl.stop.split('-')[0]])+'.png' ), figsize=(20,2), dpi=300)

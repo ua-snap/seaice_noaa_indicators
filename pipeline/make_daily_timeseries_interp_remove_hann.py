@@ -177,7 +177,7 @@ if __name__ == '__main__':
     ncpus = args.ncpus
 
     # # # TESTING
-    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    base_path = '/atlas_scratch/malindgren/nsidc_0051'
     ncpus = 32
     # # # # # 
 
@@ -216,11 +216,12 @@ if __name__ == '__main__':
     footprint = footprint_lu[ footprint_type ]
     spatial_smoothed = np.array(spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus ))
 
-    # hanning smooth -- we do this 3x according to Mark
-    hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
-    hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
-    hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
+    # # hanning smooth -- we do this 3x according to Mark
+    # hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
+    # hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
+    # hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
 
+    hanning_smoothed = spatial_smoothed
     # make sure no values < 0, set to 0
     hanning_smoothed[ np.where(hanning_smoothed < 0) ] = 0
 

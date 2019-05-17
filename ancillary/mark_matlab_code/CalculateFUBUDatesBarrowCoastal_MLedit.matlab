@@ -3,21 +3,22 @@
 close all
 clear all
 
-programname='CalculateFUBUDatesBarrowCoastal.m';
-disp(programname)
+% programname='CalculateFUBUDatesBarrowCoastal.m';
+% disp(programname)
 
 %load BarrowCoastalDailyTimeseries13 %dailyvalues dailymdates 
 load BarrowCoastalDailyTimeseries11
-load BRWCriticalCryoDataFUBUDates %BarrowObservedFreezeUpDates BarrowObservedBreakUpDates  THESE ARE THE OBSERVED DATES
+% load BRWCriticalCryoDataFUBUDates %BarrowObservedFreezeUpDates BarrowObservedBreakUpDates  THESE ARE THE OBSERVED DATES
+load BarrowCoastalDailySICvalues2
 
 % plot freeze up observed and calculated
 
-setupfigure
-trimjet2
-GetGreys
+% setupfigure
+% trimjet2
+% GetGreys
 
-subplot(2,1,1)
-hold on
+% subplot(2,1,1)
+% hold on
 
 % calcuatel Freeze Up 
 
@@ -38,15 +39,16 @@ summerdates=NaN*zeros(tyears,1);
 FreezeUpStart=NaN*zeros(tyears,1);
 FreezeUpStartConc=NaN*zeros(tyears,1);
 
-xcorr=[];
-ycorr=[];
+% xcorr=[];
+% ycorr=[];
 
 %find the average concentration for January through February
 for t=1:tyears-1
     thisset=find(allyears==eachyear(t+1) & (allmonths==1 | allmonths==2));
     tmp=dailyvalues(thisset);
     goodones=find(isfinite(tmp));
-    winters(t)=mean(tmp(goodones));
+    % winters(t)=mean(tmp(goodones));
+    winters(t+1)=mean(tmp(goodones)); %[MLCHANGED]
     winterdates(t)=mean(dailymdates(thisset));
 end
 
@@ -75,48 +77,48 @@ for t=2:tyears-1  %1978 and last year don't have enough Aug/Sept values
     FreezeUpStart(t)=dailymdates(startday);
     FreezeUpStartConc(t)=dailyvalues(startday);
     
-    [cyear,cmonth,cday]=datevec(FreezeUpStart(t));
-    jcday=FreezeUpStart(t)-datenum(cyear,1,0);
-    [oyear,omonth,oday]=datevec(BarrowObservedFreezeUpDates);
-    matchyear=find(oyear==cyear);
-    joday=BarrowObservedFreezeUpDates(matchyear)-datenum(oyear(matchyear),1,0);
-    if isfinite(matchyear)
-       junk=[cyear,cmonth,cday,jcday,oyear(matchyear),omonth(matchyear),oday(matchyear),joday];
-       fprintf(1,'%5.0f\t %3.0f\t %3.0f\t %4.0f\t %3.0f\t %3.0f\t %3.0f\t %3.0f\n',junk);
-    else
-       junk=[cyear,cmonth,cday,jcday,];
-       fprintf(1,'%5.0f\t %3.0f\t %3.0f\t %4.0f\n',junk);
-    end
+    % [cyear,cmonth,cday]=datevec(FreezeUpStart(t));
+    % jcday=FreezeUpStart(t)-datenum(cyear,1,0);
+    % [oyear,omonth,oday]=datevec(BarrowObservedFreezeUpDates);
+    % matchyear=find(oyear==cyear);
+    % joday=BarrowObservedFreezeUpDates(matchyear)-datenum(oyear(matchyear),1,0);
+    % if isfinite(matchyear)
+    %    junk=[cyear,cmonth,cday,jcday,oyear(matchyear),omonth(matchyear),oday(matchyear),joday];
+    %    fprintf(1,'%5.0f\t %3.0f\t %3.0f\t %4.0f\t %3.0f\t %3.0f\t %3.0f\t %3.0f\n',junk);
+    % else
+    %    junk=[cyear,cmonth,cday,jcday,];
+    %    fprintf(1,'%5.0f\t %3.0f\t %3.0f\t %4.0f\n',junk);
+    % end
 
-    if isfinite(joday) & isfinite(jcday)
-       plot(joday,jcday,'r*');
-       text(joday,jcday,num2str(cyear),...
-            'Color',darker,...
-            'HorizontalAlignment','center',... 
-            'VerticalAlignment','bottom',... 
-            'FontSize',9,'FontName','Helvetica',...
-            'Units','data');
-        xcorr=[xcorr joday];
-        ycorr=[ycorr jcday];
-    end
+    % if isfinite(joday) & isfinite(jcday)
+    %    plot(joday,jcday,'r*');
+    %    text(joday,jcday,num2str(cyear),...
+    %         'Color',darker,...
+    %         'HorizontalAlignment','center',... 
+    %         'VerticalAlignment','bottom',... 
+    %         'FontSize',9,'FontName','Helvetica',...
+    %         'Units','data');
+    %     xcorr=[xcorr joday];
+    %     ycorr=[ycorr jcday];
+    % end
 end
-[r,~]=corrcoef(xcorr,ycorr);
+% [r,~]=corrcoef(xcorr,ycorr);
 
-axis square
-set(gca,'xlim',[200 365]);
-set(gca,'ylim',[200 365]);
-line([200 365],[200 365],'Color','k');
-xlabel('observed')
-ylabel('calculated')
-title(['Freeze Up Start Coastal 11. R: ' num2str(r(1,2))])
+% axis square
+% set(gca,'xlim',[200 365]);
+% set(gca,'ylim',[200 365]);
+% line([200 365],[200 365],'Color','k');
+% xlabel('observed')
+% ylabel('calculated')
+% title(['Freeze Up Start Coastal 11. R: ' num2str(r(1,2))])
 
 
-subplot(2,1,2)
-hold on
+% subplot(2,1,2)
+% hold on
 
-clear xcorr ycorr
-xcorr=[];
-ycorr=[];
+% clear xcorr ycorr
+% xcorr=[];
+% ycorr=[];
 
 % find the first data where sea-ice conc exceeds winter value minus 10%
 disp(' ')
@@ -132,18 +134,18 @@ for t=2:tyears-1  %1978 and last year don't have enough Aug/Sept values
     FreezeUpEnd(t)=dailymdates(startday);
     FreezeUpEndConc(t)=dailyvalues(startday);
   
-    [cyear,cmonth,cday]=datevec(FreezeUpEnd(t));
-    jcday=FreezeUpEnd(t)-datenum(cyear,1,0);
-    [oyear,omonth,oday]=datevec(BarrowObservedFreezeUpDates);
-    matchyear=find(oyear==cyear);
-    joday=BarrowObservedFreezeUpDates(matchyear)-datenum(oyear(matchyear),1,0);
-    if isfinite(matchyear)
-       junk=[cyear,cmonth,cday,jcday,oyear(matchyear),omonth(matchyear),oday(matchyear),joday];
-       fprintf(1,'%5.0f\t %3.0f\t %3.0f\t %4.0f\t %3.0f\t %3.0f\t %3.0f\t %3.0f\n',junk);
-    else
-       junk=[cyear,cmonth,cday,jcday,];
-       fprintf(1,'%5.0f\t %3.0f\t %3.0f\t %4.0f\n',junk);
-    end
+    % [cyear,cmonth,cday]=datevec(FreezeUpEnd(t));
+    % jcday=FreezeUpEnd(t)-datenum(cyear,1,0);
+    % [oyear,omonth,oday]=datevec(BarrowObservedFreezeUpDates);
+    % matchyear=find(oyear==cyear);
+    % joday=BarrowObservedFreezeUpDates(matchyear)-datenum(oyear(matchyear),1,0);
+    % if isfinite(matchyear)
+    %    junk=[cyear,cmonth,cday,jcday,oyear(matchyear),omonth(matchyear),oday(matchyear),joday];
+    %    fprintf(1,'%5.0f\t %3.0f\t %3.0f\t %4.0f\t %3.0f\t %3.0f\t %3.0f\t %3.0f\n',junk);
+    % else
+    %    junk=[cyear,cmonth,cday,jcday,];
+    %    fprintf(1,'%5.0f\t %3.0f\t %3.0f\t %4.0f\n',junk);
+    % end
     
 
     % if isfinite(joday) & isfinite(jcday)
@@ -159,22 +161,22 @@ for t=2:tyears-1  %1978 and last year don't have enough Aug/Sept values
     % end
         
 end
-[r,~]=corrcoef(xcorr,ycorr);
+% [r,~]=corrcoef(xcorr,ycorr);
 
-axis square
-set(gca,'xlim',[200 365]);
-set(gca,'ylim',[200 365]);
-line([200 365],[200 365],'Color','k');
-xlabel('observed')
-ylabel('calculated')
-title(['Freeze Up End Coastal 11. R: ' num2str(r(1,2))])
-footer
+% axis square
+% set(gca,'xlim',[200 365]);
+% set(gca,'ylim',[200 365]);
+% line([200 365],[200 365],'Color','k');
+% xlabel('observed')
+% ylabel('calculated')
+% title(['Freeze Up End Coastal 11. R: ' num2str(r(1,2))])
+% footer
 
-BarrowFreezeUpStart=FreezeUpStart(2:tyears-1);
-save BarrowCoastalCalculatedFreezeUpStart11 FreezeUpStart FreezeUpStartConc eachyear
+% BarrowFreezeUpStart=FreezeUpStart(2:tyears-1);
+% save BarrowCoastalCalculatedFreezeUpStart11 FreezeUpStart FreezeUpStartConc eachyear
 
-BarrowFreezeUpEnd=FreezeUpEnd(2:tyears-1);
-save BarrowCoastalCalculatedFreezeUpEnd11 FreezeUpEnd FreezeUpEndConc eachyear
+% BarrowFreezeUpEnd=FreezeUpEnd(2:tyears-1);
+% save BarrowCoastalCalculatedFreezeUpEnd11 FreezeUpEnd FreezeUpEndConc eachyear
 
 % calculation for break up
 
@@ -191,13 +193,13 @@ BreakUpEnd=NaN*zeros(tyears,1);
 BreakUpEndConc=NaN*zeros(tyears,1);
 
 % do the plotting  <----------------------------------------------------------------------------------------plotting starts here
-setupfiguresquare
+% setupfiguresquare
 
-subplot(1,1,1)
-hold on
+% subplot(1,1,1)
+% hold on
 
-xcorr=[];
-ycorr=[];
+% xcorr=[];
+% ycorr=[];
 %find average January - February concentration, start with 1979
 for t=2:tyears-1
     thisset=find(allyears==eachyear(t) & (allmonths==1 | allmonths==2));
@@ -223,7 +225,6 @@ disp(' ')
 disp('Barrow Break Up');
 disp('      c a l c u l a t e d       o b s e r v e d ');
 disp(' year    mon     day     jday   year    mon     day     jday   ');
-
 for t=2:tyears-1 
     threshold=winters(t)-2*winterstd(t);
     %threshold=winters(t)-1.5*winterstd(t);
@@ -279,14 +280,14 @@ for t=2:tyears-1
     % end
 end
 
-[r,p]=corrcoef(xcorr,ycorr);
-set(gca,'xlim',[100 200]);
-set(gca,'ylim',[100 200]);
-line([100 200],[100 200],'Color','k');
-xlabel('observed')
-set(get(gca,'YLabel'),'String','');bel('calculated')
-title(['Break Up Coastal 15. R: ' num2str(r(1,2))])
-footer
+% [r,p]=corrcoef(xcorr,ycorr);
+% set(gca,'xlim',[100 200]);
+% set(gca,'ylim',[100 200]);
+% line([100 200],[100 200],'Color','k');
+% xlabel('observed')
+% set(get(gca,'YLabel'),'String','');bel('calculated')
+% title(['Break Up Coastal 15. R: ' num2str(r(1,2))])
+% footer
 
 
 % find the last day where conc exceeds summer value plus 1std

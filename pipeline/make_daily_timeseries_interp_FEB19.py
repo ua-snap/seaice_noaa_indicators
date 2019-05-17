@@ -106,8 +106,8 @@ def make_xarray_dset( arr, times, rasterio_meta_dict ):
     attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 'affine_transform': str(list(meta['transform']))}
 
     ds = xr.Dataset({'sic':(['time','yc', 'xc'], arr)},
-                coords={'xc': ('xc', xc[0,]),
-                        'yc': ('yc', yc[:,0]),
+                coords={'xc': (yc, xc[0,]),
+                        'yc': (xc, yc[:,0]),
                         'time':times }, attrs=attrs )
     return ds
 
@@ -177,7 +177,7 @@ if __name__ == '__main__':
     ncpus = args.ncpus
 
     # # # TESTING
-    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    base_path = '/atlas_scratch/malindgren/nsidc_0051'
     ncpus = 32
     # # # # # 
 
