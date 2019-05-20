@@ -330,8 +330,6 @@ if __name__ == '__main__':
     suffix = '' # empty
     years = ds_sic.time.to_index().map(lambda x: x.year).unique().tolist()[:-1] # cant compute last year
     
-    # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # # 
-
     # set all nodata pixels to np.nan
     ds_sic.data[ ds_sic.data > 1 ] = np.nan
 
@@ -387,11 +385,9 @@ if __name__ == '__main__':
     metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
     averages = { metric:make_avg_ordinal( fubu_years, years, metric) for metric in metrics }
 
-    if len(years) > 1: # this is because ds_fubu of a clim is the same as this avg...
-        # write the average dates (clim) to a NetCDF
-        ds_fubu_avg = make_xarray_dset_clim( averages, ds.coords, transform )
-        ds_fubu_avg.to_netcdf( os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_ak_smoothed_fubu_dates_mean.nc'.format(begin, end, suffix)), format='NETCDF4' )
-
+    # write the average dates (clim) to a NetCDF
+    ds_fubu_avg = make_xarray_dset_clim( averages, ds.coords, transform )
+    ds_fubu_avg.to_netcdf( os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_ak_smoothed_fubu_dates_mean.nc'.format(begin, end, suffix)), format='NETCDF4' )
 
     # # # show it not spatially warped... -- for testing....
     # output_filename = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/PNG/freezup_avg_allyears_ordinal.png'

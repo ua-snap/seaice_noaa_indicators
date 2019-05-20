@@ -29,12 +29,11 @@ if __name__ == '__main__':
 	out_fn = args.out_fn
 
 	# # # # TESTING
-	# netcdf_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc'
-	# clim_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1979-2007_Alaska_hann_smoothed_climatology.nc'
-	# points_fn = '/atlas_scratch/malindgren/nsidc_0051/selection_points/chuckchi-beaufort_points.shp'
-	# out_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/png/chuckchi-beaufort_avg_fig3.png'
+	# netcdf_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_ak_smoothed.nc'
+	# clim_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1979-2007_ak_smoothed_climatology.nc'
+	# points_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/selection_points/chuckchi-beaufort_points.shp'
+	# out_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/outputs/png/chuckchi-beaufort_avg_fig3.png'
 	# # # # 
-
 
 	ds = xr.open_dataset( netcdf_fn )
 	a = Affine(*eval( ds.affine_transform )[:6]) # make an affine transform for lookups
@@ -55,6 +54,11 @@ if __name__ == '__main__':
 
 	plt.figure(figsize=(10, 4))
 	clim_mean.plot( kind='line' )
+
+	# set up the output dir (if needed)
+	dirname = os.path.dirname(out_fn)
+	if not os.path.exists(dirname):
+		_ = os.makedirs(dirname)
 
 	plt.tight_layout()
 	plt.savefig(out_fn, figsize=(20,2), dpi=300)

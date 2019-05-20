@@ -178,10 +178,10 @@ if __name__ == '__main__':
     base_path = args.base_path
     ncpus = args.ncpus
 
-    # # # TESTING
-    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    ncpus = 64
-    # # # # # 
+    # # # # TESTING
+    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    # ncpus = 64
+    # # # # # # 
 
     # list all data
     input_path = os.path.join( base_path,'prepped','alaska' ) # currently set for Alaska-only [watch this]
