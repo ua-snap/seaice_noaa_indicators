@@ -397,26 +397,26 @@ if __name__ == '__main__':
     pool.close()
     pool.join()
 
-    # # # # # TEST 
-    # quick and dirty data frame
-    def convert_time( x ):
-        if x[1] != 'nan':
-            out = pd.Timestamp.strptime(''.join(x.tolist()).split('.')[0], '%Y%j')
-            out = out.strftime('%Y-%m-%d')
-        else:
-            out = '0000'
-        return out
+    # # # # # # TEST 
+    # # quick and dirty data frame
+    # def convert_time( x ):
+    #     if x[1] != 'nan':
+    #         out = pd.Timestamp.strptime(''.join(x.tolist()).split('.')[0], '%Y%j')
+    #         out = out.strftime('%Y-%m-%d')
+    #     else:
+    #         out = '0000'
+    #     return out
 
-    metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
-    test = pd.DataFrame({i:{j:fubu_years[i][j][0][0] for j in fubu_years[i]} for i in fubu_years}).T
-    # new = test.breakup_start.reset_index().astype(str).apply(lambda x: convert_time(x), axis=1)
-    new = pd.DataFrame({i:test[i].reset_index().astype(str).apply(lambda x: convert_time(x), axis=1) for i in metrics} )
-    new.index=test.index
-    new = new[['freezeup_start','freezeup_end','breakup_start','breakup_end']]
-    new.to_csv('/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/app_data/barrow_fubu_dates_michael_nosmooth.csv')
-    # new.index = test.index
-    # new.to_dict()
-    # # # END
+    # metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
+    # test = pd.DataFrame({i:{j:fubu_years[i][j][0][0] for j in fubu_years[i]} for i in fubu_years}).T
+    # # new = test.breakup_start.reset_index().astype(str).apply(lambda x: convert_time(x), axis=1)
+    # new = pd.DataFrame({i:test[i].reset_index().astype(str).apply(lambda x: convert_time(x), axis=1) for i in metrics} )
+    # new.index=test.index
+    # new = new[['freezeup_start','freezeup_end','breakup_start','breakup_end']]
+    # new.to_csv('/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/app_data/barrow_fubu_dates_michael_nosmooth.csv')
+    # # new.index = test.index
+    # # new.to_dict()
+    # # # # END
 
     # # make NC file with metric outputs as variables and years as the time dimension
     # # --------- --------- --------- --------- --------- --------- --------- ---------
@@ -429,7 +429,7 @@ if __name__ == '__main__':
     else:
         ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
 
-    out_fn = os.path.join( base_path, 'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_Alaska_hann_smoothed_fubu_dates.nc'.format(str(begin), str(end), suffix))
+    out_fn = os.path.join( base_path, 'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_ak_smoothed_fubu_dates.nc'.format(str(begin), str(end), suffix))
     ds_fubu.to_netcdf( out_fn, format='NETCDF4')
 
     # make averages in ordinal day across all fu/bu
@@ -439,7 +439,7 @@ if __name__ == '__main__':
     if len(years) > 1: # this is because ds_fubu of a clim is the same as this avg...
         # write the average dates (clim) to a NetCDF
         ds_fubu_avg = make_xarray_dset_clim( averages, ds.coords, transform )
-        ds_fubu_avg.to_netcdf( os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_Alaska_hann_smoothed_fubu_dates_mean.nc'.format(begin, end, suffix)), format='NETCDF4' )
+        ds_fubu_avg.to_netcdf( os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_ak_smoothed_fubu_dates_mean.nc'.format(begin, end, suffix)), format='NETCDF4' )
 
 
     # # # show it not spatially warped... -- for testing....
@@ -451,11 +451,10 @@ if __name__ == '__main__':
     with rasterio.open( template_fn ) as tmp:
         meta = tmp.meta
 
-
     for metric in metrics:
         arr = averages[ metric ]
 
-        output_filename = os.path.join(base_path,'outputs','GTiff','{}_avg_{}-{}{}_ordinal_hann_smoothed.tif'.format(metric, begin, end, suffix))
+        output_filename = os.path.join(base_path,'outputs','GTiff','{}_avg_{}-{}{}_ordinal_ak_smoothed.tif'.format(metric, begin, end, suffix))
         dirname = os.path.dirname(output_filename)
         if not os.path.exists(dirname):
             _ = os.makedirs(dirname)
