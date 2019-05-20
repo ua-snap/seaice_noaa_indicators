@@ -255,6 +255,24 @@ def make_xarray_dset_years_levels( arr, years, coords, metrics, transform ):
                         'year':years }, attrs=attrs )
     return ds
 
+def fubu_dframe_pp(fubu_years):
+    ''' this only looks at a single profile and was used for testing with Mark'''
+    def convert_time( x ):
+        ''' time-conversion to Ordinal Day '''
+        if x[1] != 'nan':
+            out = pd.Timestamp.strptime(''.join(x.tolist()).split('.')[0],'%Y%j')
+            out = out.strftime('%Y-%m-%d')
+        else:
+            out = '0000'
+        return out
+
+    metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
+    test = pd.DataFrame({i:{j:fubu_years[i][j][0][0] for j in fubu_years[i]} for i in fubu_years}).T
+    # new = test.breakup_start.reset_index().astype(str).apply(lambda x: convert_time(x), axis=1)
+    new = pd.DataFrame({i:test[i].reset_index().astype(str).apply(lambda x: convert_time(x), axis=1) for i in metrics} )
+    new.index=test.index
+    new = new[['freezeup_start','freezeup_end','breakup_start','breakup_end']]
+    return new
 
 if __name__ == '__main__':
     import matplotlib
@@ -294,15 +312,6 @@ if __name__ == '__main__':
     # ncpus = 64
     # # # # # # # # # END TESTING # # # # # # # 
     
-    # # # # # # # # CLIMATOLOGY TESTING
-    # # open the NetCDF that we made...
-    # base_path = '/atlas_scratch/malindgren/nsidc_0051'
-    # begin = '1979'
-    # end = '2007' # 2013
-    # fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_smoothed_climatology.nc'.format(begin, end) )
-    # ncpus = 32
-    # # # # # # # # # # # END CLIMATOLOGY TESTING
-
     # # # # # # # # # TESTING # # # # # # # # # 
     # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
     # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/mark_test_data_march2019/nsidc_0051_sic_nasateam_1978-2013_Alaska_testcase_oldseries.nc'
@@ -316,45 +325,12 @@ if __name__ == '__main__':
     # # open the NetCDF that we made...
     ds = xr.open_dataset( fn ).load() # load it so it processes a LOT faster plus it is small...
     
-    # handle climatology or single year
-    if 'dayofyear' in ds.coords:
-        doy = True
-        if ds.dayofyear.max().data == 366:
-            begin_tmp = '2004' # leap year
-            end_tmp = '2004'
-        elif ds.dayofyear == 365:
-            begin_tmp = '2003' # nonleap year
-            end_tmp = '2003'
-        else:
-            raise BaseException('at least one full year must be used')
-
-        # make a new_ds so we can re-use most of the other fubu computation but on a single 'year' [climatology]
-        # time is hardwired to a single 'year' to make be able to utilize the same codebase as FUBU all years
-        time = pd.date_range('{}-01-01'.format(begin_tmp), '{}-12-31'.format(end_tmp), freq='D')
-        arr = ds['sic'].values
-        xc = ds.xc.values
-        yc = ds.yc.values
-        transform = '[24877.0390602206, 0.0, -2249452.313150307, 0.0, -24706.883179945104, 1149853.2079733, 0.0, 0.0, 1.0]'
-
-        attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 'affine_transform':transform}
-        ds = xr.Dataset({ 'sic':(['time','yc', 'xc'], arr)},
-                    coords={'xc': ('xc', xc),
-                            'yc': ('yc', yc),
-                            'time':time}, 
-                            attrs=attrs )
-
-        ds_sic = ds['sic']
-        # begin, end = 'daily','clim'
-        suffix = '_clim'
-
-    else:
-        doy = False
-        # slice the data to the full years... currently this is 1979-20**
-        ds_sic = ds.sel( time=slice( begin, end ) )['sic']
-        suffix = '' # empty
+    # slice the data to the full years... currently this is 1979-20**
+    ds_sic = ds.sel( time=slice( begin, end ) )['sic']
+    suffix = '' # empty
+    years = ds_sic.time.to_index().map(lambda x: x.year).unique().tolist()[:-1] # cant compute last year
     
     # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # #   # # # # # # # # # 
-    years = ds_sic.time.to_index().map(lambda x: x.year).unique().tolist()[:-1] # cant compute last year
 
     # set all nodata pixels to np.nan
     ds_sic.data[ ds_sic.data > 1 ] = np.nan
@@ -397,38 +373,13 @@ if __name__ == '__main__':
     pool.close()
     pool.join()
 
-    # # # # # # TEST 
-    # # quick and dirty data frame
-    # def convert_time( x ):
-    #     if x[1] != 'nan':
-    #         out = pd.Timestamp.strptime(''.join(x.tolist()).split('.')[0], '%Y%j')
-    #         out = out.strftime('%Y-%m-%d')
-    #     else:
-    #         out = '0000'
-    #     return out
-
-    # metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
-    # test = pd.DataFrame({i:{j:fubu_years[i][j][0][0] for j in fubu_years[i]} for i in fubu_years}).T
-    # # new = test.breakup_start.reset_index().astype(str).apply(lambda x: convert_time(x), axis=1)
-    # new = pd.DataFrame({i:test[i].reset_index().astype(str).apply(lambda x: convert_time(x), axis=1) for i in metrics} )
-    # new.index=test.index
-    # new = new[['freezeup_start','freezeup_end','breakup_start','breakup_end']]
-    # new.to_csv('/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/app_data/barrow_fubu_dates_michael_nosmooth.csv')
-    # # new.index = test.index
-    # # new.to_dict()
-    # # # # END
-
     # # make NC file with metric outputs as variables and years as the time dimension
     # # --------- --------- --------- --------- --------- --------- --------- ---------
     # stack into arrays by metric
     transform = ds.affine_transform
     metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
     stacked = { metric:np.array([fubu_years[year][metric] for year in years ]) for metric in metrics }
-    if doy == True:
-        ds_fubu = make_xarray_dset_clim( stacked, ds.coords, transform )
-    else:
-        ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
-
+    ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
     out_fn = os.path.join( base_path, 'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_ak_smoothed_fubu_dates.nc'.format(str(begin), str(end), suffix))
     ds_fubu.to_netcdf( out_fn, format='NETCDF4')
 
