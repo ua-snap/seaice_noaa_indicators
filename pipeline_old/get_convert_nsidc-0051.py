@@ -114,7 +114,7 @@ if __name__ == '__main__':
     # os.chdir( base_path )
     # # # # # # # # # 
 
-    print("Enter EarthData credentials")
+    print("Enter credentials")
     username = input("Username: ")
     password = getpass.getpass("Password: ")
     

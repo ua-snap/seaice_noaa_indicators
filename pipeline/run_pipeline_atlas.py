@@ -2,53 +2,36 @@
 
 # interpolate
 import subprocess, os
-# os.chdir('/Users/malindgren/Documents/repos/seaice_noaa_indicators/pipeline')
-os.chdir('/atlas_scratch/malindgren/repos/seaice_noaa_indicators/pipeline')
 
-# base_path = '/atlas_scratch/malindgren/nsidc_0051'
-base_path = '/atlas_scratch/malindgren/nsidc_0051'
-ncpus = 32
+os.chdir('/workspace/UA/malindgren/repos/seaice_noaa_indicators/pipeline')
+base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+ncpus = str(64)
 
-for window_len in [1]: # ,3,4,5,6,7,8,9,10]:
-	print(window_len)
-	# _ = subprocess.call(['ipython','make_daily_timeseries_interp.py','--','-b', base_path, '-w', str(window_len)])
+# interpolate and smooth daily timeseries
+_ = subprocess.call(['ipython','make_daily_timeseries_interp_smooth.py','--','-b', base_path, '-n', ncpus])
 
-	begin = '1979'
-	for end in ['2007','2013','2017']:
-		end = '2013' # test
-		# make clim
-		begin_full = '1978'
-		end_full = '2017'
-		if window_len == 1:
-			fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_paper_weights.nc'.format(str(begin_full), str(end_full))
-			out_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_paper_weights_climatology.nc'.format(str(begin), str(end))
-		else:
-			fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}.nc'.format(str(begin_full), str(end_full), str(window_len),)
-			out_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}_climatology.nc'.format(str(begin_full), str(end_full), str(window_len),)
-		
-		_ = subprocess.call(['ipython','make_daily_timeseries_climatology.py','--','-f', fn, '-o', out_fn, '-b', begin, '-e', end])
-		# calc FUBU
-		if window_len == 1:
-			fn = os.path.join( base_path,  'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_paper_weights.nc'.format(str(begin), str(end),))
-		else:
-			fn = os.path.join( base_path,  'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}.nc'.format(str(begin), str(end), str(window_len),))
+begin = '1979'
+for end in ['2007','2013','2017']:
+	
+	# make clim from smoothed timeseries
+	begin_full, end_full = '1978', '2017'
+	fn = base_path, 'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_ak_smoothed.nc'.format(begin_full, end_full)
+	out_fn = 'nsidc_0051_sic_nasateam_{}-{}_ak_smoothed_climatology.nc'.format(begin, end)
+	_ = subprocess.call(['ipython','make_daily_timeseries_climatology.py','--','-f', fn, '-o', out_fn, '-b', begin, '-e', end])
+	
+	# calc FUBU
+	fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_ak_smoothed.nc'.format(begin, end))
+	_ = subprocess.call(['ipython','compute_fubu_dates.py','--','-b', base_path, '-f', fn, '-begin', begin, '-end', end])
 
-		_ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain.py','--','-b', base_path, '-f', fn, '-begin', begin, '-end', end, '-w', str(window_len)])
+	# calc FUBU clim
+	fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_ak_smoothed_climatology.nc'.format(begin, end))
+	# a single year needs to be passed to the FUBU computation.  
+	#  this uses 2004, it is meaningless, but necessary to treat the 30year clim as a 'year'.
+	cbegin, cend = '2004','2004'
+	_ = subprocess.call(['ipython','compute_fubu_dates.py','--','-b',base_path,'-f',fn,'-begin',cbegin,'-end',cend,'-n',ncpus])
 
-		# calc FUBU clim
-		if window_len == 1:
-			fn = os.path.join( base_path, 'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_paper_weights_climatology.nc'.format(str(begin), str(end)) )
-		else:
-			fn = os.path.join( base_path, 'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_{}_climatology.nc'.format(str(begin), str(end), str(window_len)) )
-		
-		begin = '2004'
-		end = '2004'
-		_ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain.py','--','-b', base_path, '-f',fn, '-begin',begin,'-end',end, '-n', str(ncpus), '-w', str(window_len)])
-		# _ = subprocess.call(['ipython','compute_fubu_allyears_alaska_domain.py','--','-b', base_path, '-f', fn, '-w', str(window_len)])
-		# break			
-
-	# plot this stuff.
-	_ = subprocess.call(['ipython','make_figure_3_paper.py','--','-b', base_path, '-w', str(window_len) ])
-	_ = subprocess.call(['ipython','make_figure_4_paper.py','--','-b', base_path, '-w', str(window_len) ])
-	_ = subprocess.call(['ipython','make_figure_5-6_paper.py','--','-b', base_path, '-w', str(window_len) ])
-	_ = subprocess.call(['ipython','make_figure_7_paper.py','--','-b', base_path, '-w', str(window_len) ])
+# plots mimicking the paper figs
+_ = subprocess.call(['ipython','make_figure_3_paper.py','--','-b',base_path])
+_ = subprocess.call(['ipython','make_figure_4_paper.py','--','-b',base_path])
+_ = subprocess.call(['ipython','make_figure_5-6_paper.py','--','-b',base_path])
+_ = subprocess.call(['ipython','make_figure_7_paper.py','--','-b',base_path])
