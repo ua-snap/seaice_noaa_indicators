@@ -25,11 +25,12 @@ if __name__ == '__main__':
     # dirname, basename = os.path.split(fn)
     # # # # # # # # #
 
+    dirname, basename = os.path.split(fn)
     for end_year in ['2007','2013','2017']:
         # hardwired arguments for some climatology needs.
         begin = '1979'
         end = end_year
-        out_fn = os.path.join( dirname, 'nsidc_0051_sic_nasateam_{}-{}_Alaska_hann_smoothed_climatology.nc'.format(begin,end) )
+        out_fn = os.path.join( dirname, 'nsidc_0051_sic_nasateam_{}-{}_ak_smoothed_climatology.nc'.format(begin,end) )
     
         # make climatology --> 0-366 includes leaps
         ds = xr.open_dataset( fn ).load()
