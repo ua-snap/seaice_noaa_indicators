@@ -21,8 +21,12 @@ for end in ['2007','2013','2017']:
 	clim_fn = os.path.join(base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_ak_smoothed_climatology.nc'.format(begin, end))
 	_ = subprocess.call(['ipython','make_daily_timeseries_climatology.py','--','-f', fn, '-o', clim_fn, '-b', begin, '-e', end])
 	
+	break
 	# calc FUBU
 	print('fubu')
+	outpath = os.path.join(base_path, 'outputs','NetCDF')
+	if not os.path.exists(outpath):
+		_ = os.path.makedirs(outpath)
 	_ = subprocess.call(['ipython','compute_fubu_dates.py','--','-b', base_path, '-f', fn, '-begin', begin, '-end', end])
 
 	# # calc FUBU clim
@@ -32,7 +36,6 @@ for end in ['2007','2013','2017']:
 	with xr.open_dataset(fubu_fn) as ds:
 		ds_clim = ds.sel(year=slice(1979,2007)).mean('year').round(0)
 		ds_clim.to_netcdf(fubu_clim_fn)
-	break
 
 # plots mimicking the paper figs
 points_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/selection_points/chuckchi-beaufort_points.shp'

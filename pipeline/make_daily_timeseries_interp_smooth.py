@@ -184,7 +184,7 @@ if __name__ == '__main__':
     # # # # # # 
 
     # list all data
-    input_path = os.path.join( base_path,'prepped','alaska' ) # currently set for Alaska-only [watch this]
+    input_path = os.path.join( base_path,'prepped','north' )
     files = sorted([ os.path.join(r,fn) for r,s,files in os.walk(input_path) for fn in files if fn.endswith('.tif') ])
     data_times = [ make_datetimes( os.path.basename(fn).split('.')[0].split('_')[1] ) for fn in files ]
 
@@ -230,7 +230,7 @@ if __name__ == '__main__':
     hanning_smoothed[ np.where(hanning_smoothed > 1) ] = 1
 
     # write this out as a GeoTiff
-    out_fn = os.path.join( base_path,'smoothed','GTiff','nsidc_0051_sic_nasateam_{}-{}_ak_smoothed.tif'.format(str(begin.year),str(end.year)) )
+    out_fn = os.path.join( base_path,'smoothed','GTiff','nsidc_0051_sic_nasateam_{}-{}_north_smoothed.tif'.format(str(begin.year),str(end.year)) )
     _ = make_output_dirs( os.path.dirname(out_fn) )
     meta.update(count=hanning_smoothed.shape[0])
     with rasterio.open( out_fn, 'w', **meta ) as out:
@@ -247,6 +247,6 @@ if __name__ == '__main__':
     encoding.update({ 'zlib':True, 'comp':5, 'contiguous':False, 'dtype':'float32' })
     out_ds.sic.encoding = encoding
 
-    out_fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_ak_smoothed.nc'.format(str(begin.year),str(end.year)) )
+    out_fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_north_smoothed.nc'.format(str(begin.year),str(end.year)) )
     _ = make_output_dirs( os.path.dirname(out_fn) )
     out_ds.to_netcdf( out_fn, format='NETCDF4' )

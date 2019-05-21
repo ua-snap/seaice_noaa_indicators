@@ -262,7 +262,7 @@ if __name__ == '__main__':
     
     # # # # # # # # # # # TESTING # # # # # # # # # 
     # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_ak_smoothed.nc'
+    # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_north_smoothed.nc'
     # begin = '1979'
     # end = '2017'
     # ncpus=64
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
     stacked = { metric:np.array([fubu_years[year][metric] for year in years ]) for metric in metrics }
     ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
-    out_fn = os.path.join( base_path, 'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_ak_smoothed_fubu_dates.nc'.format(str(begin), str(end), suffix))
+    out_fn = os.path.join( base_path, 'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_north_smoothed_fubu_dates.nc'.format(str(begin), str(end), suffix))
     ds_fubu.to_netcdf( out_fn, format='NETCDF4')
 
     # make averages in ordinal day across all fu/bu
@@ -343,21 +343,21 @@ if __name__ == '__main__':
 
     # write the average dates (clim) to a NetCDF
     ds_fubu_avg = make_xarray_dset_mean( averages, ds.coords, transform )
-    ds_fubu_avg.to_netcdf( os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_ak_smoothed_fubu_dates_mean.nc'.format(begin, end, suffix)), format='NETCDF4' )
+    ds_fubu_avg.to_netcdf( os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_north_smoothed_fubu_dates_mean.nc'.format(begin, end, suffix)), format='NETCDF4' )
 
     # # # show it not spatially warped... -- for testing....
     # output_filename = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/PNG/freezup_avg_allyears_ordinal.png'
     # show_2D_array_aspatial( averages['freezeup_end'], output_filename )
 
     # Make a raster with the outputs
-    template_fn = os.path.join(base_path,'prepped','alaska','1981','nt_19810101_n07_v1-1_n.tif')
+    template_fn = os.path.join(base_path,'prepped','north','1981','nt_19810101_n07_v1-1_n.tif')
     with rasterio.open( template_fn ) as tmp:
         meta = tmp.meta
 
     for metric in metrics:
         arr = averages[ metric ]
 
-        output_filename = os.path.join(base_path,'outputs','GTiff','{}_avg_{}-{}{}_ordinal_ak_smoothed.tif'.format(metric, begin, end, suffix))
+        output_filename = os.path.join(base_path,'outputs','GTiff','{}_avg_{}-{}{}_ordinal_north_smoothed.tif'.format(metric, begin, end, suffix))
         dirname = os.path.dirname(output_filename)
         if not os.path.exists(dirname):
             _ = os.makedirs(dirname)
