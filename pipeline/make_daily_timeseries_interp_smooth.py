@@ -178,10 +178,10 @@ if __name__ == '__main__':
     base_path = args.base_path
     ncpus = args.ncpus
 
-    # # # # TESTING
-    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # ncpus = 64
-    # # # # # # 
+    # # # TESTING
+    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    ncpus = 64
+    # # # # # 
 
     # list all data
     input_path = os.path.join( base_path,'prepped','north' )
@@ -199,7 +199,7 @@ if __name__ == '__main__':
         meta = template.meta.copy()
         height,width = template.shape
 
-    arr = stack_rasters( files, ncpus=32 )
+    arr = stack_rasters( files, ncpus=ncpus )
     ds = make_xarray_dset( arr, pd.DatetimeIndex(data_times), meta )
     da = ds['sic']
 
@@ -216,9 +216,11 @@ if __name__ == '__main__':
                     'queens':np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])}
 
     footprint = footprint_lu[ footprint_type ]
+    print('spatial smooth')
     spatial_smoothed = np.array(spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus ))
 
     # hanning smooth -- we do this 3x according to Mark
+    print('hanning smooth')
     hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
     hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
     hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
