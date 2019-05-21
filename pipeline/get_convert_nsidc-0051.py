@@ -108,19 +108,18 @@ if __name__ == '__main__':
     base_path = args.base_path
     ncpus = args.ncpus
 
-    # # # FOR TESTING
-    # ncpus = 32
+    # # # # FOR TESTING
+    # ncpus = 64
     # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # os.chdir( base_path )
-    # # # # # # # # # 
+    # # # # # # # # # # 
 
+    
+    # # DOWNLOAD ALL DAILY DATA NSIDC 0051
     print("Enter EarthData credentials")
     username = input("Username: ")
     password = getpass.getpass("Password: ")
-    
-    # # DOWNLOAD ALL DAILY DATA NSIDC 0051
     # username = "malindgren"
-    # password = "" # insert password here... This is the EarthData Login...
+    # password = "*" # insert password here... This is the EarthData Login...
 
     url = 'https://daacdata.apps.nsidc.org/pub/DATASETS/nsidc0051_gsfc_nasateam_seaice/final-gsfc/north/daily'
 
@@ -135,12 +134,13 @@ if __name__ == '__main__':
 
     # move the data 
     print( '[ PROCESS ] moving and converting' )
+    daily_path = os.path.join(raw_path, 'daily')
+    if os.path.exists(daily_path):
+        _ = os.system('rm -rf {}'.format(daily_path))
     shutil.move( os.path.join(base_path,'pub','DATASETS','nsidc0051_gsfc_nasateam_seaice','final-gsfc','north','daily'), raw_path )
+    os.chdir( daily_path )
 
-    raw_path_daily = os.path.join( raw_path, 'daily' )
-    os.chdir( raw_path_daily )
-
-    filenames = [ os.path.join(r,fn) for r,s,files in os.walk( raw_path_daily ) for fn in files if fn.endswith( '.bin' )]
+    filenames = [ os.path.join(r,fn) for r,s,files in os.walk( daily_path ) for fn in files if fn.endswith( '.bin' )]
 
     pool = mp.Pool( ncpus )
     f = partial( convert_GTiff, output_path=os.path.join(base_path,'prepped','north') )

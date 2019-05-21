@@ -1,3 +1,7 @@
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# compute FUBU dates from NSIDC-0051 Daily Sea Ice Concentrations
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 def show_2D_array_aspatial( arr, output_filename ):
     img = plt.imshow( arr, interpolation='nearest' )
     plt.colorbar( img ) 
@@ -5,24 +9,11 @@ def show_2D_array_aspatial( arr, output_filename ):
     plt.close()
     return output_filename  
 
-def convert_ordinalday_year_to_datetime( year, ordinal_day ):
-    '''
-    ordinal_day = [int] range(1, 365+1) or range(1, 366+1) # if leapyear
-    year = [int] four digit date that can be read in datetime.date
-    '''
-    return datetime.date( year=year, month=1, day=1 ) + datetime.timedelta( ordinal_day - 1 )
-
 def get_summer(month):
     return (month == 8) | (month == 9)
 
 def get_winter(month):
     return (month == 1) | (month == 2)
-
-def rolling_window(a, window):
-    ''' borrowed from http://www.rigtorp.se/2011/01/01/rolling-statistics-numpy.html '''
-    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
-    strides = a.strides + (a.strides[-1],)
-    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
 
 def freezeup_start( ds_sic, summer_mean, summer_std, year ):
     ''' find the first instance of sic exceeding the summer mean + 1 standard deviation threshold '''
@@ -152,12 +143,10 @@ def breakup_end( ds_sic, summer_mean, summer_std, year ):
     ''' compute the breakup ending date for a give year '''
     # % find the last day where conc exceeds summer value plus 1std
 
-    # daily_vals = ds_sic.sel( time=slice(str(year)+'-06-01', str(year)+'-09-30') ).copy(deep=True)
-    daily_vals = ds_sic.sel( time=slice(str(year)+'-06-01', str(year)+'-10-01') ).copy(deep=True)
+    daily_vals = ds_sic.sel( time=slice(str(year)+'-06-01', str(year)+'-09-30') ).copy(deep=True)
     start_ordinalday = int( daily_vals.time.to_index().min().strftime('%j') )
     # handle potential case of end_year not included in input series
-    # end_ordinalday = int(pd.Timestamp.strptime(str(year)+'-09-30', '%Y-%m-%d').strftime('%j')) # 9/30
-    end_ordinalday = int(pd.Timestamp.strptime(str(year)+'-10-01', '%Y-%m-%d').strftime('%j'))
+    end_ordinalday = int(pd.Timestamp.strptime(str(year)+'-09-30', '%Y-%m-%d').strftime('%j')) # 9/30
 
     # make a mask
     mask = np.where( np.isnan( daily_vals.isel(time=0).data ) )
@@ -210,7 +199,6 @@ def make_avg_ordinal( fubu, years, metric ):
     [ NOTE ]: we are masking the -9999 values for these computations...  which will 
                 most likely need to change for proper use.
     '''
-
     # stack it
     arr = np.array([ fubu_years[year][metric] for year in years ])
     mask = np.isnan( arr[0] ).copy()
@@ -231,7 +219,7 @@ def make_xarray_dset_years( arr_dict, years, coords, transform ):
                         'year':years }, attrs=attrs )
     return ds
 
-def make_xarray_dset_clim( arr_dict, coords, transform ):
+def make_xarray_dset_mean( arr_dict, coords, transform ):
     ''' make a NetCDF file output computed metrics for FU/BU in a 3-D variable-based way '''
 
     xc,yc = (coords['xc'], coords['yc'])
@@ -241,38 +229,6 @@ def make_xarray_dset_clim( arr_dict, coords, transform ):
                 coords={'xc': ('xc', xc),
                         'yc': ('yc', yc)}, attrs=attrs )
     return ds
-
-def make_xarray_dset_years_levels( arr, years, coords, metrics, transform ):
-    ''' make a NetCDF file output computed metrics for FU/BU in a 4-D way '''
-
-    xc,yc = (coords['xc'], coords['yc'])
-    attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 'affine_transform': transform}
-
-    ds = xr.Dataset({ 'ordinal_day_of_year':(['year','metrics','yc','xc'], arr) },
-                coords={'xc': ('xc', xc),
-                        'yc': ('yc', yc),
-                        'metric':metrics,
-                        'year':years }, attrs=attrs )
-    return ds
-
-def fubu_dframe_pp(fubu_years):
-    ''' this only looks at a single profile and was used for testing with Mark'''
-    def convert_time( x ):
-        ''' time-conversion to Ordinal Day '''
-        if x[1] != 'nan':
-            out = pd.Timestamp.strptime(''.join(x.tolist()).split('.')[0],'%Y%j')
-            out = out.strftime('%Y-%m-%d')
-        else:
-            out = '0000'
-        return out
-
-    metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
-    test = pd.DataFrame({i:{j:fubu_years[i][j][0][0] for j in fubu_years[i]} for i in fubu_years}).T
-    # new = test.breakup_start.reset_index().astype(str).apply(lambda x: convert_time(x), axis=1)
-    new = pd.DataFrame({i:test[i].reset_index().astype(str).apply(lambda x: convert_time(x), axis=1) for i in metrics} )
-    new.index=test.index
-    new = new[['freezeup_start','freezeup_end','breakup_start','breakup_end']]
-    return new
 
 if __name__ == '__main__':
     import matplotlib
@@ -386,7 +342,7 @@ if __name__ == '__main__':
     averages = { metric:make_avg_ordinal( fubu_years, years, metric) for metric in metrics }
 
     # write the average dates (clim) to a NetCDF
-    ds_fubu_avg = make_xarray_dset_clim( averages, ds.coords, transform )
+    ds_fubu_avg = make_xarray_dset_mean( averages, ds.coords, transform )
     ds_fubu_avg.to_netcdf( os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_ak_smoothed_fubu_dates_mean.nc'.format(begin, end, suffix)), format='NETCDF4' )
 
     # # # show it not spatially warped... -- for testing....
@@ -410,11 +366,11 @@ if __name__ == '__main__':
             out.write( arr, 1 )
 
 
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # SOME NOTES ABOUT TRANSLATING FROM MLAB :
-    # ----------------------------------------
-    # [ 1 ]: to make an ordinal date that matches the epoch used by matlab in python
-    # ordinal_date = date.toordinal(date(1971,1,1)) + 366 
-    # if not the number will be 366 days off due to the epoch starting January 0, 0000 whereas in Py Jan 1, 0001.
-    # [ 2 ]: when computing stdev it is important to set the ddof=1 which is the matlab default.  Python leaves it at 0 default.
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# SOME NOTES ABOUT TRANSLATING FROM MLAB :
+# ----------------------------------------
+# [ 1 ]: to make an ordinal date that matches the epoch used by matlab in python
+# ordinal_date = date.toordinal(date(1971,1,1)) + 366 
+# if not the number will be 366 days off due to the epoch starting January 0, 0000 whereas in Py Jan 1, 0001.
+# [ 2 ]: when computing stdev it is important to set the ddof=1 which is the matlab default.  Python leaves it at 0 default.
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
