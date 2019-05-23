@@ -113,15 +113,13 @@ def make_xarray_dset( arr, times, rasterio_meta_dict ):
                         'time':times }, attrs=attrs )
     return ds
 
-def mean_filter_2D( arr, footprint ):
-    from scipy.ndimage import generic_filter
-    return generic_filter( arr, np.nanmean, footprint=footprint )
+# def mean_filter_2D( arr, footprint ):
+#     from scipy.ndimage import generic_filter
+#     return generic_filter( arr, np.nanmean, footprint=footprint )
 
-def smooth3( x ):
-    ''' smoothing to mimick the smoothing from meetings with Mark/Hajo'''
-    from scipy import signal
-    win = np.array([0.25,0.5,0.25])
-    return signal.convolve(x, win, mode='same') / sum(win)
+def mean_filter_2D(arr, size):
+    from scipy.ndimage import uniform_filter
+    return uniform_filter(a, size=3, mode='constant')
 
 def smooth2( x, window_len, window ):
     ''' [ currently unused ]
@@ -137,6 +135,12 @@ def smooth2( x, window_len, window ):
     filtered = signal.convolve(x, win, mode='same') / sum(win)
     return filtered
 
+def smooth3( x ):
+    ''' smoothing to mimick the smoothing from meetings with Mark/Hajo'''
+    from scipy import signal
+    win = np.array([0.25,0.5,0.25])
+    return signal.convolve(x, win, mode='same') / sum(win)
+
 def stack_rasters( files, ncpus=32 ):
     pool = mp.Pool( ncpus )
     arr = np.array( pool.map( open_raster, files ) )
@@ -144,12 +148,25 @@ def stack_rasters( files, ncpus=32 ):
     pool.join()
     return arr
 
-def spatial_smooth( arr, footprint='rooks', ncpus=32 ):
-    f = partial( mean_filter_2D, footprint=footprint )
+# def spatial_smooth( arr, footprint='rooks', ncpus=32 ):
+#     f = partial( mean_filter_2D, footprint=footprint )
+#     pool = mp.Pool( ncpus )
+#     out_arr = pool.map( f, [a for a in arr] )
+#     pool.close()
+#     pool.join()
+#     return np.array(out_arr)
+
+def spatial_smooth( arr, size=3, ncpus=32 ):
+    f = partial( mean_filter_2D, size=footprint )
     pool = mp.Pool( ncpus )
     out_arr = pool.map( f, [a for a in arr] )
     pool.close()
     pool.join()
+    return np.array(out_arr)
+
+def spatial_smooth_serial( arr, footprint='rooks' ):
+    f = partial( mean_filter_2D, footprint=footprint )
+    out_arr = np.array([f(i) for i in [a for a in arr]])
     return out_arr
 
 def make_output_dirs( dirname ):
@@ -165,7 +182,8 @@ if __name__ == '__main__':
     import numpy as np
     import xarray as xr
     from functools import partial
-    import multiprocessing as mp
+    # import multiprocessing as mp
+    from pathos import multiprocessing as mp
     import argparse
 
     # parse some args
@@ -217,7 +235,9 @@ if __name__ == '__main__':
 
     footprint = footprint_lu[ footprint_type ]
     print('spatial smooth')
-    spatial_smoothed = np.array(spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus ))
+    # spatial_smoothed = spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus )
+    # spatial_smoothed = spatial_smooth_serial( da_interp.values, footprint=footprint )
+    spatial_smoothed = spatial_smooth( da_interp.values, size=3, ncpus=ncpus )
 
     # hanning smooth -- we do this 3x according to Mark
     print('hanning smooth')
