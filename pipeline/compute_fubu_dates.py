@@ -261,13 +261,13 @@ if __name__ == '__main__':
     end = args.end
     ncpus = args.ncpus
     
-    # # # # # # # # # # TESTING # # # # # # # # # 
-    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_north_smoothed.nc'
-    begin = '1979'
-    end = '2017'
-    ncpus=32
-    # # # # # # # # # END TESTING # # # # # # # 
+    # # # # # # # # # # # TESTING # # # # # # # # # 
+    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_north_smoothed.nc'
+    # begin = '1979'
+    # end = '2017'
+    # ncpus=32
+    # # # # # # # # # # END TESTING # # # # # # # 
         
     # # # # # # # # # TESTING MARK # # # # # # # # # 
     # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
@@ -321,7 +321,7 @@ if __name__ == '__main__':
     # winter_mean = seasonals['winter_mean']['sic']
     # winter_std = seasonals['winter_std']['sic']
 
-    # run parallel (notworking due to an issue that I think is solved in Py3.7.*)
+    # [FIX ME] run parallel (notworking due to an issue that I think is solved in Py3.7.*)
     # f = partial( wrap_fubu, ds_sic=ds_sic, summer_mean=summer_mean, summer_std=summer_std, winter_mean=winter_mean, winter_std=winter_std )
     # pool = mp.Pool( ncpus )
     # fubu_years = dict(zip(years, pool.map(f, years)))
