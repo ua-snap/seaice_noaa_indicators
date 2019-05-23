@@ -119,7 +119,7 @@ def make_xarray_dset( arr, times, rasterio_meta_dict ):
 
 def mean_filter_2D(arr, size):
     from scipy.ndimage import uniform_filter
-    return uniform_filter(a, size=3, mode='constant')
+    return uniform_filter(arr, size=3, mode='constant')
 
 def smooth2( x, window_len, window ):
     ''' [ currently unused ]
@@ -157,17 +157,17 @@ def stack_rasters( files, ncpus=32 ):
 #     return np.array(out_arr)
 
 def spatial_smooth( arr, size=3, ncpus=32 ):
-    f = partial( mean_filter_2D, size=footprint )
+    f = partial( mean_filter_2D, size=size )
     pool = mp.Pool( ncpus )
     out_arr = pool.map( f, [a for a in arr] )
     pool.close()
     pool.join()
     return np.array(out_arr)
 
-def spatial_smooth_serial( arr, footprint='rooks' ):
-    f = partial( mean_filter_2D, footprint=footprint )
-    out_arr = np.array([f(i) for i in [a for a in arr]])
-    return out_arr
+# def spatial_smooth_serial( arr, footprint='rooks' ):
+#     f = partial( mean_filter_2D, footprint=footprint )
+#     out_arr = np.array([f(i) for i in [a for a in arr]])
+#     return out_arr
 
 def make_output_dirs( dirname ):
     if not os.path.exists( dirname ):
