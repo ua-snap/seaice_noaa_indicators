@@ -321,8 +321,8 @@ if __name__ == '__main__':
     # winter_mean = seasonals['winter_mean']['sic']
     # winter_std = seasonals['winter_std']['sic']
 
+    f = partial( wrap_fubu, ds_sic=ds_sic, summer_mean=summer_mean, summer_std=summer_std, winter_mean=winter_mean, winter_std=winter_std )
     # [FIX ME] run parallel (notworking due to an issue that I think is solved in Py3.7.*)
-    # f = partial( wrap_fubu, ds_sic=ds_sic, summer_mean=summer_mean, summer_std=summer_std, winter_mean=winter_mean, winter_std=winter_std )
     # pool = mp.Pool( ncpus )
     # fubu_years = dict(zip(years, pool.map(f, years)))
     # pool.close()
