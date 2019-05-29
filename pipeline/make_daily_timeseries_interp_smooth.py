@@ -263,9 +263,9 @@ if __name__ == '__main__':
 
     footprint = footprint_lu[ footprint_type ]
     print('spatial smooth')
-    # spatial_smoothed = spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus )
+    spatial_smoothed = spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus )
     # spatial_smoothed = spatial_smooth_serial( da_interp.values, footprint=footprint )
-    spatial_smoothed = spatial_smooth( da_interp.values, size=3, ncpus=ncpus )
+    # spatial_smoothed = spatial_smooth( da_interp.values, size=3, ncpus=ncpus )
 
     # hanning smooth -- we do this 3x according to Mark
     print('hanning smooth')
