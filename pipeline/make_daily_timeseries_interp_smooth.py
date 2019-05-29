@@ -113,13 +113,13 @@ def make_xarray_dset( arr, times, rasterio_meta_dict ):
                         'time':times }, attrs=attrs )
     return ds
 
-# def mean_filter_2D( arr, footprint ):
-#     from scipy.ndimage import generic_filter
-#     return generic_filter( arr, np.nanmean, footprint=footprint )
+def mean_filter_2D( arr, footprint ):
+    from scipy.ndimage import generic_filter
+    return generic_filter( arr, np.nanmean, footprint=footprint, origin=0 )
 
-def mean_filter_2D(arr, size):
-    from scipy.ndimage import uniform_filter
-    return uniform_filter(arr, size=3, mode='constant')
+# def mean_filter_2D(arr, size):
+#     from scipy.ndimage import uniform_filter
+#     return uniform_filter(arr, size=3, mode='constant')
 
 def smooth2( x, window_len, window ):
     ''' [ currently unused ]
@@ -141,6 +141,12 @@ def smooth3( x ):
     win = np.array([0.25,0.5,0.25])
     return signal.convolve(x, win, mode='same') / sum(win)
 
+# def smooth4( x ):
+#     from scipy.ndimage import generic_filter
+#     win = np.array([0.25,0.5,0.25])
+#     return generic_filter( arr, np.nanmean, footprint=footprint, origin=0 )
+
+
 def stack_rasters( files, ncpus=32 ):
     pool = mp.Pool( ncpus )
     arr = np.array( pool.map( open_raster, files ) )
@@ -148,21 +154,21 @@ def stack_rasters( files, ncpus=32 ):
     pool.join()
     return arr
 
-# def spatial_smooth( arr, footprint='rooks', ncpus=32 ):
-#     f = partial( mean_filter_2D, footprint=footprint )
-#     pool = mp.Pool( ncpus )
-#     out_arr = pool.map( f, [a for a in arr] )
-#     pool.close()
-#     pool.join()
-#     return np.array(out_arr)
-
-def spatial_smooth( arr, size=3, ncpus=32 ):
-    f = partial( mean_filter_2D, size=size )
+def spatial_smooth( arr, footprint='rooks', ncpus=32 ):
+    f = partial( mean_filter_2D, footprint=footprint )
     pool = mp.Pool( ncpus )
     out_arr = pool.map( f, [a for a in arr] )
     pool.close()
     pool.join()
     return np.array(out_arr)
+
+# def spatial_smooth( arr, size=3, ncpus=32 ):
+#     f = partial( mean_filter_2D, size=size )
+#     pool = mp.Pool( ncpus )
+#     out_arr = pool.map( f, [a for a in arr] )
+#     pool.close()
+#     pool.join()
+#     return np.array(out_arr)
 
 # def spatial_smooth_serial( arr, footprint='rooks' ):
 #     f = partial( mean_filter_2D, footprint=footprint )
@@ -198,7 +204,7 @@ if __name__ == '__main__':
 
     # # # # TESTING
     # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # ncpus = 64
+    # ncpus = 32
     # # # # # # 
 
     # list all data
@@ -219,13 +225,35 @@ if __name__ == '__main__':
 
     arr = stack_rasters( files, ncpus=ncpus )
     ds = make_xarray_dset( arr, pd.DatetimeIndex(data_times), meta )
-    da = ds['sic']
+    da = ds['sic'].copy()
 
     # RESAMPLE TO DAILY...
     dat = da.values.copy()
-    dat[ np.where(dat > 100) ] = np.nan
+    polemask = (dat != 251)
+    dat[ np.where(dat > 100)] = np.nan
     da.data = dat
-    da_interp = da.resample(time='1D').interpolate('linear')
+    
+    # # # new ts interpolation
+    da_interp = da.resample(time='1D').asfreq() # test
+    
+    def interpolate(x):
+        if not np.isnan(x).all():
+            index = np.arange(len(x))
+            notnan = np.logical_not(np.isnan(x))
+            return np.interp(index, index[notnan], x[notnan])
+
+    da_interp.data = np.apply_along_axis(interpolate, axis=0, arr=da_interp).round(4)
+    # # # 
+
+    # # # # TEST doesnt deal with np.nan's in a clean way
+    # from scipy.ndimage.filters import convolve
+    # arr2 = convolve(arr, weights=np.full((3, 3), 1.0/9), origin=0, mode='nearest')
+    # convolve2d(arr,np.full((3, 3), 1.0/9),max_missing=0.5,verbose=True)
+    # # # # 
+    
+    # old ts interpolation...
+    # da_interp_old = da.resample(time='1D').interpolate('linear')
+    # da_interp
 
     # spatial smoothing...
     # spatially smooth the 2-D daily slices of data using a mean generic filter. (without any aggregation)
@@ -254,7 +282,7 @@ if __name__ == '__main__':
     # write this out as a GeoTiff
     out_fn = os.path.join( base_path,'smoothed','GTiff','nsidc_0051_sic_nasateam_{}-{}_north_smoothed.tif'.format(str(begin.year),str(end.year)) )
     _ = make_output_dirs( os.path.dirname(out_fn) )
-    meta.update(count=hanning_smoothed.shape[0])
+    meta.update(count=hanning_smoothed.shape[0], compress='lzw')
     with rasterio.open( out_fn, 'w', **meta ) as out:
         out.write( hanning_smoothed.astype(np.float32) )
 

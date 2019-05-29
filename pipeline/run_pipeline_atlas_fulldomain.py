@@ -35,6 +35,7 @@ for end in ['2007','2013','2017']:
 	with xr.open_dataset(fubu_fn) as ds:
 		ds_clim = ds.sel(year=slice(1979,2007)).mean('year').round(0)
 		ds_clim.to_netcdf(fubu_clim_fn)
+	
 
 # plots mimicking the paper figs
 points_fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/selection_points/chuckchi-beaufort_points.shp'

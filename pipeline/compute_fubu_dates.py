@@ -264,6 +264,7 @@ if __name__ == '__main__':
     # # # # # # # # # # # TESTING # # # # # # # # # 
     # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
     # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_north_smoothed.nc'
+    # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_ak_smoothed.nc'
     # begin = '1979'
     # end = '2017'
     # ncpus=32
