@@ -115,7 +115,9 @@ def make_xarray_dset( arr, times, rasterio_meta_dict ):
 
 def mean_filter_2D( arr, footprint ):
     from scipy.ndimage import generic_filter
-    return generic_filter( arr, np.nanmean, footprint=footprint, origin=0 )
+    out = generic_filter( arr, np.nanmean, footprint=footprint, origin=0 )
+    out[np.isnan(arr)] = np.nan
+    return out
 
 # def mean_filter_2D(arr, size):
 #     from scipy.ndimage import uniform_filter
@@ -204,7 +206,7 @@ if __name__ == '__main__':
 
     # # # # TESTING
     # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # ncpus = 32
+    # ncpus = 64
     # # # # # # 
 
     # list all data
@@ -226,6 +228,17 @@ if __name__ == '__main__':
     arr = stack_rasters( files, ncpus=ncpus )
     ds = make_xarray_dset( arr, pd.DatetimeIndex(data_times), meta )
     da = ds['sic'].copy()
+
+    # get a masks layer from the raw files.  These are all values > 250
+    # ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ 
+    # 251 Circular mask used in the Arctic to cover the irregularly-shaped data 
+    #       gap around the pole (caused by the orbit inclination and instrument swath)
+    # 252 Unused
+    # 253 Coastlines
+    # 254 Superimposed land mask
+    # 255 Missing data
+    mask = arr[0].copy()
+    mask[mask < 251] = 0 # convert all non-mask values to 0
 
     # RESAMPLE TO DAILY...
     dat = da.values.copy()
@@ -266,6 +279,13 @@ if __name__ == '__main__':
     spatial_smoothed = spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus )
     # spatial_smoothed = spatial_smooth_serial( da_interp.values, footprint=footprint )
     # spatial_smoothed = spatial_smooth( da_interp.values, size=3, ncpus=ncpus )
+
+    # mask the spatial smoothed outputs with the mask at each 2D slice.
+    def _maskit(x, mask):
+        x[mask != 0] = np.nan
+        return x
+    
+    spatial_smoothed = np.array([_maskit(i, mask) for i in spatial_smoothed])
 
     # hanning smooth -- we do this 3x according to Mark
     print('hanning smooth')
