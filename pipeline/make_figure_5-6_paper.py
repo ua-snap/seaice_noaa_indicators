@@ -30,13 +30,13 @@ fubu_fn = args.fubu_fn
 points_fn = args.points_fn
 out_fn = args.out_fn
 
-# # TESTING
-netcdf_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc'
-clim_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1979-2013_Alaska_hann_smoothed_climatology.nc'
-fubu_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/NetCDF/nsidc_0051_sic_nasateam_1979-2013_Alaska_hann_smoothed_fubu_dates.nc'
-points_fn = '/atlas_scratch/malindgren/nsidc_0051/selection_points/chuckchi-barrow-beaufort_points.shp'
-out_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/png/chuckchi-barrow-beaufort_avg_fig5-6.png'
-# # # # # #
+# # # TESTING
+# netcdf_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_Alaska_hann_smoothed.nc'
+# clim_fn = '/atlas_scratch/malindgren/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1979-2013_Alaska_hann_smoothed_climatology.nc'
+# fubu_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/NetCDF/nsidc_0051_sic_nasateam_1979-2013_Alaska_hann_smoothed_fubu_dates.nc'
+# points_fn = '/atlas_scratch/malindgren/nsidc_0051/selection_points/chuckchi-barrow-beaufort_points.shp'
+# out_fn = '/atlas_scratch/malindgren/nsidc_0051/outputs/png/chuckchi-barrow-beaufort_avg_fig5-6.png'
+# # # # # # #
 
 ds = xr.open_dataset( netcdf_fn )
 a = Affine(*eval( ds.affine_transform )[:6]) # make an affine transform for lookups
