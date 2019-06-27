@@ -9,7 +9,7 @@ clear all
 %load BarrowCoastalDailyTimeseries13 %dailyvalues dailymdates 
 load BarrowCoastalDailyTimeseries11
 % load BRWCriticalCryoDataFUBUDates %BarrowObservedFreezeUpDates BarrowObservedBreakUpDates  THESE ARE THE OBSERVED DATES
-load BarrowCoastalDailySICvalues2
+load BarrowCoastalDailySICvalues2 %overwrite the dailyvalues with TEST data from Mark
 
 % plot freeze up observed and calculated
 

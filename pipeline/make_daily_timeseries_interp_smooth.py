@@ -156,10 +156,11 @@ def stack_rasters( files, ncpus=32 ):
     pool.join()
     return arr
 
-def spatial_smooth( arr, footprint='rooks', ncpus=32 ):
+def spatial_smooth( arr, footprint, ncpus=32 ):
+    arr_list = [a.copy() for a in arr] # unpack 3d (time,rows,cols) array to 2d list
     f = partial( mean_filter_2D, footprint=footprint )
     pool = mp.Pool( ncpus )
-    out_arr = pool.map( f, [a for a in arr] )
+    out_arr = pool.map( f, arr_list )
     pool.close()
     pool.join()
     return np.array(out_arr)
@@ -172,10 +173,11 @@ def spatial_smooth( arr, footprint='rooks', ncpus=32 ):
 #     pool.join()
 #     return np.array(out_arr)
 
-# def spatial_smooth_serial( arr, footprint='rooks' ):
-#     f = partial( mean_filter_2D, footprint=footprint )
-#     out_arr = np.array([f(i) for i in [a for a in arr]])
-#     return out_arr
+def spatial_smooth_serial( arr, footprint ):
+    arr_list = [a for a in arr][:30]
+    f = partial( mean_filter_2D, footprint=footprint )
+    out_arr = np.array([f(i.copy()) for i in arr_list])
+    return out_arr
 
 def make_output_dirs( dirname ):
     if not os.path.exists( dirname ):
@@ -190,8 +192,8 @@ if __name__ == '__main__':
     import numpy as np
     import xarray as xr
     from functools import partial
-    # import multiprocessing as mp
-    from pathos import multiprocessing as mp
+    import multiprocessing as mp
+    # from pathos import multiprocessing as mp
     import argparse
 
     # parse some args
@@ -204,10 +206,10 @@ if __name__ == '__main__':
     base_path = args.base_path
     ncpus = args.ncpus
 
-    # # # # TESTING
-    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # ncpus = 64
-    # # # # # # 
+    # # # TESTING
+    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    ncpus = 64
+    # # # # # 
 
     # list all data
     input_path = os.path.join( base_path,'prepped','north' )
@@ -226,8 +228,9 @@ if __name__ == '__main__':
         height,width = template.shape
 
     arr = stack_rasters( files, ncpus=ncpus )
-    ds = make_xarray_dset( arr, pd.DatetimeIndex(data_times), meta )
+    ds = make_xarray_dset( arr.copy(), pd.DatetimeIndex(data_times), meta )
     da = ds['sic'].copy()
+    # del arr # cleanup
 
     # get a masks layer from the raw files.  These are all values > 250
     # ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ 
@@ -244,7 +247,8 @@ if __name__ == '__main__':
     dat = da.values.copy()
     polemask = (dat != 251)
     dat[ np.where(dat > 100)] = np.nan
-    da.data = dat
+    da.data = dat.copy()
+    del dat, arr # cleanup
     
     # # # new ts interpolation
     da_interp = da.resample(time='1D').asfreq() # test
@@ -276,39 +280,66 @@ if __name__ == '__main__':
 
     footprint = footprint_lu[ footprint_type ]
     print('spatial smooth')
-    spatial_smoothed = spatial_smooth( da_interp.values, footprint=footprint, ncpus=ncpus )
+    # spatial_smoothed = spatial_smooth( da_interp.values, footprint=footprint, ncpus=30 )
     # spatial_smoothed = spatial_smooth_serial( da_interp.values, footprint=footprint )
     # spatial_smoothed = spatial_smooth( da_interp.values, size=3, ncpus=ncpus )
+
+
+    # # # # TEST NEW SMOOTHING:
+    arr_list = [a.copy() for a in da_interp.values]
+    f = partial( mean_filter_2D, footprint=footprint )
+    pool = mp.Pool( 50 )
+    spatial_smoothed = pool.map( f, arr_list )
+    pool.close()
+    pool.join()
+    # spatial_smoothed = np.array(out_arr)
+    # # # # # END TEST
 
     # mask the spatial smoothed outputs with the mask at each 2D slice.
     def _maskit(x, mask):
         x[mask != 0] = np.nan
         return x
     
-    spatial_smoothed = np.array([_maskit(i, mask) for i in spatial_smoothed])
+    smoothed = np.array([_maskit(i, mask) for i in spatial_smoothed]).copy()
 
     # hanning smooth -- we do this 3x according to Mark
+    
     print('hanning smooth')
-    hanning_smoothed = np.apply_along_axis( smooth3, arr=spatial_smoothed, axis=0 )
-    hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
-    hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
+    
+    # # # # # TEST
+    # from functools import reduce
+    
+    # n = 3
+    # def hann_smooth( x ):
+    #     return np.apply_along_axis( smooth3, arr=x, axis=0 )
+    
+    # test = reduce(lambda x, _: hann_smooth(x), range(n), smoothed)
+    # # # # # END TEST
+    
+    n = 3
+    # explicit method
+    for i in range(n):
+        smoothed = np.apply_along_axis( smooth3, arr=smoothed, axis=0 )
+
+    # hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
+    # hanning_smoothed = np.apply_along_axis( smooth3, arr=hanning_smoothed, axis=0 )
 
     # make sure no values < 0, set to 0
-    hanning_smoothed[ np.where(hanning_smoothed < 0) ] = 0
+    smoothed[ np.where(smoothed < 0) ] = 0
 
     # make sure no values > 1, set to 1
-    hanning_smoothed[ np.where(hanning_smoothed > 1) ] = 1
+    smoothed[ np.where(smoothed > 1) ] = 1
 
     # write this out as a GeoTiff
     out_fn = os.path.join( base_path,'smoothed','GTiff','nsidc_0051_sic_nasateam_{}-{}_north_smoothed.tif'.format(str(begin.year),str(end.year)) )
     _ = make_output_dirs( os.path.dirname(out_fn) )
-    meta.update(count=hanning_smoothed.shape[0], compress='lzw')
+    meta.update(count=smoothed.shape[0], compress='lzw')
     with rasterio.open( out_fn, 'w', **meta ) as out:
-        out.write( hanning_smoothed.astype(np.float32) )
+        out.write( smoothed.astype(np.float32) )
 
     # write it out as a NetCDF
     out_ds = da_interp.copy(deep=True)
-    out_ds.values = hanning_smoothed.astype(np.float32)
+    out_ds.values = smoothed.astype(np.float32)
     out_ds = out_ds.to_dataset( name='sic' )
     out_ds.attrs = ds.attrs
 
@@ -319,4 +350,4 @@ if __name__ == '__main__':
 
     out_fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_north_smoothed.nc'.format(str(begin.year),str(end.year)) )
     _ = make_output_dirs( os.path.dirname(out_fn) )
-    out_ds.to_netcdf( out_fn, format='NETCDF4' )
+    out_ds.to_netcdf( out_fn ) # , format='NETCDF4' )

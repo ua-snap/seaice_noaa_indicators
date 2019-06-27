@@ -2,12 +2,12 @@
 # compute FUBU dates from NSIDC-0051 Daily Sea Ice Concentrations
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def show_2D_array_aspatial( arr, output_filename ):
-    img = plt.imshow( arr, interpolation='nearest' )
-    plt.colorbar( img ) 
-    plt.savefig( output_filename )
-    plt.close()
-    return output_filename  
+# def show_2D_array_aspatial( arr, output_filename ):
+#     img = plt.imshow( arr, interpolation='nearest' )
+#     plt.colorbar( img ) 
+#     plt.savefig( output_filename )
+#     plt.close()
+#     return output_filename  
 
 def get_summer(month):
     return (month == 8) | (month == 9)
@@ -231,16 +231,16 @@ def make_xarray_dset_mean( arr_dict, coords, transform ):
     return ds
 
 if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use( 'agg' )
-    from matplotlib import pyplot as plt
+    # import matplotlib
+    # matplotlib.use( 'agg' )
+    # from matplotlib import pyplot as plt
     import xarray as xr
     import numpy as np
     import os, dask
     from functools import partial
     import calendar, datetime
-    # import multiprocessing as mp
-    from pathos import multiprocessing as mp
+    import multiprocessing as mp
+    # from pathos import multiprocessing as mp
     import rasterio
     import pandas as pd
     import argparse
@@ -261,14 +261,14 @@ if __name__ == '__main__':
     end = args.end
     ncpus = args.ncpus
     
-    # # # # # # # # # # # TESTING # # # # # # # # # 
-    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_north_smoothed.nc'
+    # # # # # # # # # # TESTING # # # # # # # # # 
+    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_hann3_north_smoothed.nc'
     # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_ak_smoothed.nc'
-    # begin = '1979'
-    # end = '2017'
-    # ncpus=32
-    # # # # # # # # # # END TESTING # # # # # # # 
+    begin = '1979'
+    end = '2017'
+    ncpus=64
+    # # # # # # # # # END TESTING # # # # # # # 
         
     # # # # # # # # # TESTING MARK # # # # # # # # # 
     # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'

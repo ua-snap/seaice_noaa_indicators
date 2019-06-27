@@ -1,52 +1,29 @@
-# SEA ICE NOAA INDICATORS
----
-## __Current Processing Steps:__
+# Sea Ice NOAA Indicators: Data Processing Steps
 
-### Preprocess the data:
-- stack to a 3-D daily array, and linearly interpolate over the missing days to generate a full Daily time-series
-- moving window mean spatial filter 
-	- footprint shape:
-	```
-		array([[0, 1, 0],
-		       [1, 1, 1],
-		       [0, 1, 0]])
-	```
-- set all out-of-bounds values to np.nan for computation cleanliness
-- write stacked data to NetCDF to improve further computation of FU/BU
-- _[?] have I implemented the mean filter properly?_
-- _[?] how to implement the Hanning Smoothing Filter?_
+#### PRE-PROCESSING:
+1. download and convert NSIDC-0051 Daily Sea Ice Concentration time-series from generic flat-binary files to GeoTiff.
+2. stack converted GeoTiff time-series to an (irregular) daily time-series in NetCDF format providing a 3-dimensional array with x,y coordinates and time stamps attached to each grid point/slice, which allows for significant processing leverage in this sort of environment.
+3. interpolate (linearly) time-series to produce a regular series at the daily time-step.
+4. Hanning smooth the 1-D profiles (pixel through time) using a simple convolution technique and the following weights `[0.25,0.5,0.25]`. This is performed iteratively on each profile 3 times to smooth out small ~3day events.
+5. Spatially smooth 2D array slices at each time-step using a simple mean 3x3 filter. This attempts removal of some left over land-sea layover effects from the sensor platform(s). 
 
-### FU/BU Computations:
-- group data to summer months (august/september) and compute average/stdev by year
-- group data to winter months (january/february) and compute average/stdev by year
-
-- __FREEZEUP Start:__
-	- for a given year, slice daily values to the dates Sept.1 through Dec.31
-	- compute summer_mean + summer_stdev for given year to use as a threshold.
-	-  set all threshold values less than 15% concentration to 15%
-	- compute where the daily values are >= threshold values
-	- find index of first daily value that exceeds threshold and use this index value as the ordinal day for the FreezeUp in that year by adding to the ordinal day of Sept.1 to that index value (store back in NetCDF).
-
-- __FREEZEUP End:__
-	- for a given year, slice daily values to the dates Sept.1 through Dec.31
-	- compute winter_mean - 10% and use as a threshold
-	- compute where the daily values are >= threshold values
-	- find index of first daily value that exceeds threshold and use this index value as the ordinal day for the FreezeUp in that year by adding to the ordinal day of Sept.1 to that index value (store back in NetCDF).
-	- if any values are the same as the freezeup_start days add 1 day to those values which mimicks what Mark did in the Mlab script.
-
-- __BREAKUP Start:__
-	- for a given year, slice daily values to Feb.14 through Aug.1
-	- compute for the given year the winter_mean - 2 /* winter_stdev to use as a threshold
-	- groupby 2 week intervals beyond each day in the sliced daily values series and compute where the first time all 2 week values are < threshold, which indicates breakup start
-
-- __BREAKUP End:__
-	- for a given year, slice daily values to the dates June.1 through Sept.30
-	- compute summer_mean + summer_stdev and set all values that are less than 15% concentration to 15%
-	- compute where the daily values are < threshold values
-	- find index of first daily value that is less than threshold and use this index value as the ordinal day for the FreezeUp in that year by adding to the ordinal day of June.1 to that index value (store back in NetCDF).
-	- _[?] is the index day the first or last day of the 2 week period, in the all_true computation?_
-
-- other questions:
-	- [?] what is a good way to compare outputs?
-
-	
+#### FU/BU COMPUTATION:
+1. compute the annual summer mean and standard deviation for data matching the months of August/September.
+2. compute the annual winter mean and standard deviation for data matching the months of January/February.
+3. for each year, perform FUBU (in this order)
+	- __FreezeUp Start__:
+		- ___time-frame___: September 1 through December 31
+		- ___threshold___: summer_mean + summer_stdev (minimum concentration set to 15%)
+		- ___algorithm___: Find 1st instance of concentrations exceeding the threshold. return ordinal day of that instance.
+	- __FreezeUp End__:
+		- ___time-frame___: September 1 through December 31
+		- ___threshold___: winter_mean - 10% concentration [note: winter_mean is from current year+1]
+		- ___algorithm___: start lookup from FreezeUp Start output, and find the first instance of concentration exceeding the threshold. return ordinal day of that instance.
+	- __BreakUp Start__:
+		- ___time-frame___: February 1 through August 1
+		- ___threshold___: winter_mean - (2*winter_stdev)
+		- ___algorithm___: find last day for which previous two weeks are above threshold. Set to nodata any pixels where the summer_mean is greater-than 40%. If day chosen is last day of time window, set it to nodata.
+	- __BreakUp End__:
+		- ___time-frame___: June 1 through September 30
+		- ___threshold___: summer_mean + summer_stdev (with minimum concentration set to 15%)
+		- ___algorithm___: find the last instance where concentration is greater than the threshold. return ordinal day of that instance. If summer_mean is greater than 25%, set pixel to nodata. If the ordinal chosen is the last day of the time-window, set it to nodata.
