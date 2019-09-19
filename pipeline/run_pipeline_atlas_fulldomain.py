@@ -1,6 +1,4 @@
-# # # # [ THIS IS NOT WORKING CURRENTLY ]
-
-# interpolate
+# # # # Processing Pipeline for the Full Domain (Artic-wide)
 import subprocess, os, warnings
 import xarray as xr
 
@@ -10,7 +8,7 @@ ncpus = str(64)
 
 # interpolate and smooth daily timeseries
 print('interp/smooth')
-_ = subprocess.call(['ipython','make_daily_timeseries_interp_smooth.py','--','-b', base_path, '-n', ncpus])
+# _ = subprocess.call(['ipython','make_daily_timeseries_interp_smooth.py','--','-b', base_path, '-n', ncpus])
 
 begin = '1979'
 for end in ['2007','2013','2017']:
@@ -19,22 +17,22 @@ for end in ['2007','2013','2017']:
 	begin_full, end_full = '1978', '2017'
 	fn = os.path.join(base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_north_smoothed.nc'.format(begin_full, end_full))
 	clim_fn = os.path.join(base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_north_smoothed_climatology.nc'.format(begin, end))
-	_ = subprocess.call(['ipython','make_daily_timeseries_climatology.py','--','-f', fn, '-o', clim_fn, '-b', begin, '-e', end])
+	# _ = subprocess.call(['ipython','make_daily_timeseries_climatology.py','--','-f', fn, '-o', clim_fn, '-b', begin, '-e', end])
 	
 	# calc FUBU
 	print('fubu')
 	outpath = os.path.join(base_path, 'outputs','NetCDF')
 	if not os.path.exists(outpath):
 		_ = os.path.makedirs(outpath)
-	_ = subprocess.call(['ipython','compute_fubu_dates.py','--','-b', base_path, '-f', fn, '-begin', begin, '-end', end])
+	# _ = subprocess.call(['ipython','compute_fubu_dates.py','--','-b', base_path, '-f', fn, '-begin', begin, '-end', end])
 
 	# # calc FUBU clim
 	print('fubu clim')
 	fubu_fn = os.path.join( base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}_north_smoothed_fubu_dates.nc'.format(begin, end))
 	fubu_clim_fn = fubu_fn.replace('.nc', '_climatology.nc')
-	with xr.open_dataset(fubu_fn) as ds:
-		ds_clim = ds.sel(year=slice(1979,2007)).mean('year').round(0)
-		ds_clim.to_netcdf(fubu_clim_fn)
+	# with xr.open_dataset(fubu_fn) as ds:
+	# 	ds_clim = ds.sel(year=slice(1979,2007)).mean('year').round(0)
+	# 	ds_clim.to_netcdf(fubu_clim_fn)
 	
 
 # plots mimicking the paper figs
@@ -44,12 +42,7 @@ out_fn = os.path.join(base_path,'outputs/png/chuckchi-beaufort_avg_fig3.png')
 _ = subprocess.call(['ipython','make_figure_3_paper.py','--','-n',fn,'-c',clim_fn,'-p',points_fn,'-o',out_fn])
 # fig4
 out_fn = os.path.join(base_path,'outputs','png','barrow_avg_fig4.png')
-_ = subprocess.call(['ipython','make_figure_4_paper.py','--','-n',fn,'-c',clim_fn,'-f',fubu_fn,'-p',points_fn,'-o',out_fn])
+_ = subprocess.call(['ipython','make_figure_4_paper.py','--','-n',fn,'-c',clim_fn,'-f',fubu_fn,'-fc',fubu_clim_fn,'-p',points_fn,'-o',out_fn])
 # fig5/6
 _ = subprocess.call(['ipython','make_figure_5-6_paper.py','--','-b',base_path])
 _ = subprocess.call(['ipython','make_figure_7_paper.py','--','-b',base_path])
-
-
-
-
-

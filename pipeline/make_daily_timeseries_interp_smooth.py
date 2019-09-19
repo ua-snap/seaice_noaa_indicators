@@ -3,6 +3,12 @@
 # # interpolate missing dates linearly
 # # # # # # # # # # # # # # # # # # # # 
 
+# initial numba imports needed for the func load:
+from numba import cfunc, carray
+from numba.types import intc, intp, float64, voidptr
+from numba.types import CPointer
+
+
 def nan_helper( y ):
     '''
     Helper to handle indices and logical indices of NaNs.
@@ -119,6 +125,8 @@ def mean_filter_2D( arr, footprint ):
     out[np.isnan(arr)] = np.nan
     return out
 
+
+
 # def mean_filter_2D(arr, size):
 #     from scipy.ndimage import uniform_filter
 #     return uniform_filter(arr, size=3, mode='constant')
@@ -179,6 +187,21 @@ def spatial_smooth_serial( arr, footprint ):
     out_arr = np.array([f(i.copy()) for i in arr_list])
     return out_arr
 
+
+@cfunc(intc(CPointer(float64), intp,
+        CPointer(float64), voidptr))
+def spatial_smooth_serial_numba(values_ptr, len_values, result, data):
+    ''' 
+    perform a mean filter over a window using scipy.ndimage.generic_filter
+    faster with this compiled numba function.
+    '''
+    values = carray(values_ptr, (len_values,), dtype=float64)
+    result[0] = values[0]
+    for v in values[1:]:
+        result[0] = result[0] + v
+    result[0] = result[0] / len_values
+    return 1
+
 def make_output_dirs( dirname ):
     if not os.path.exists( dirname ):
         _ = os.makedirs( dirname )
@@ -193,8 +216,9 @@ if __name__ == '__main__':
     import xarray as xr
     from functools import partial
     import multiprocessing as mp
-    # from pathos import multiprocessing as mp
     import argparse
+    from scipy.ndimage import generic_filter
+    from scipy import LowLevelCallable
 
     # parse some args
     parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
@@ -208,7 +232,7 @@ if __name__ == '__main__':
 
     # # # TESTING
     base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    ncpus = 64
+    ncpus = 32
     # # # # # 
 
     # list all data
@@ -250,7 +274,7 @@ if __name__ == '__main__':
     da.data = dat.copy()
     del dat, arr # cleanup
     
-    # # # new ts interpolation
+    # # # interpolate the timeseries to regular dailies
     da_interp = da.resample(time='1D').asfreq() # test
     
     def interpolate(x):
@@ -283,17 +307,17 @@ if __name__ == '__main__':
     # spatial_smoothed = spatial_smooth( da_interp.values, footprint=footprint, ncpus=30 )
     # spatial_smoothed = spatial_smooth_serial( da_interp.values, footprint=footprint )
     # spatial_smoothed = spatial_smooth( da_interp.values, size=3, ncpus=ncpus )
+    spatial_smoothed = [generic_filter(a.copy(), LowLevelCallable(spatial_smooth_serial_numba.ctypes), footprint=footprint) for a in da_interp.values]
 
-
-    # # # # TEST NEW SMOOTHING:
-    arr_list = [a.copy() for a in da_interp.values]
-    f = partial( mean_filter_2D, footprint=footprint )
-    pool = mp.Pool( 50 )
-    spatial_smoothed = pool.map( f, arr_list )
-    pool.close()
-    pool.join()
-    # spatial_smoothed = np.array(out_arr)
-    # # # # # END TEST
+    # # # # # TEST NEW SMOOTHING:
+    # arr_list = [a.copy() for a in da_interp.values]
+    # f = partial( mean_filter_2D, footprint=footprint )
+    # pool = mp.Pool( ncpus-1 )
+    # spatial_smoothed = pool.map( f, arr_list )
+    # pool.close()
+    # pool.join()
+    # # spatial_smoothed = np.array(out_arr)
+    # # # # # # END TEST
 
     # mask the spatial smoothed outputs with the mask at each 2D slice.
     def _maskit(x, mask):

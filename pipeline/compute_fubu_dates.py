@@ -23,7 +23,8 @@ def freezeup_start( ds_sic, summer_mean, summer_std, year ):
     start_ordinalday = int( daily_vals.time.to_index().min().strftime('%j') )
     
     # threshold and set minimum value to .15 or 15% conc
-    mean_plus_std = (summer_mean.sel(year=int(year)).copy() + summer_std.sel(year=int(year)).copy())
+    smean = summer_mean.sel(year=int(year)).copy()
+    mean_plus_std = (smean + summer_std.sel(year=int(year)).copy())
     threshold = mean_plus_std.data.copy()
     threshold[ threshold < .15 ] = .15
 
@@ -46,6 +47,9 @@ def freezeup_start( ds_sic, summer_mean, summer_std, year ):
     ordinal_days_freezeup_start = np.apply_along_axis( first_freezeup, axis=0, arr=arr, \
                                         start_ordinalday=start_ordinalday ).astype( np.float32 )
     ordinal_days_freezeup_start[ mask ] = np.nan
+
+    # if the Aug-Sept mean/threshold is >25%, then that date is NAN. [from Mark/Hajo]
+    ordinal_days_freezeup_start[smean > .25] = np.nan
     return ordinal_days_freezeup_start
 
 def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
@@ -65,24 +69,49 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
     # threshold
     arr = daily_vals.values >= threshold
 
+    # def last_freezeup( x, y, start_ordinalday ):
+    #     ''' determine the last freezeup day and return doy '''
+    #     vals, = np.where( x == True )
+    #     # only consider values that are > the freezeup_start day
+    #     vals = vals[np.where( (vals+start_ordinalday) > y )]
+    #     if len(vals) > 0:
+    #         minval = vals.min()
+    #         lastfreezeday = (minval+start_ordinalday)
+    #         if lastfreezeday > y:
+    #             out = lastfreezeday
+    #         elif lastfreezeday == y:
+    #             # if same day, take next day
+    #             out = lastfreezeday + 1
+    #         else: #unsolvable
+    #             out = np.nan #-9999
+    #     else:
+    #         out = np.nan #-9999
+    #     return out
+
+
     def last_freezeup( x, y, start_ordinalday ):
         ''' determine the last freezeup day and return doy '''
         vals, = np.where( x == True )
-        # only consider values that are > the freezeup_start day
-        vals = vals[np.where( (vals+start_ordinalday) > y )]
+        if not np.isnan(y):
+            # only consider values that are > the freezeup_start day
+            vals = vals[np.where( (vals+start_ordinalday) > y )]
         if len(vals) > 0:
             minval = vals.min()
             lastfreezeday = (minval+start_ordinalday)
-            if lastfreezeday > y:
+            if not np.isnan(y):
+                if lastfreezeday > y:
+                    out = lastfreezeday
+                elif lastfreezeday == y:
+                    # if same day, take next day
+                    out = lastfreezeday + 1
+                else: #unsolvable
+                    out = np.nan #-9999
+            else:
                 out = lastfreezeday
-            elif lastfreezeday == y:
-                # if same day, take next day
-                out = lastfreezeday + 1
-            else: #unsolvable
-                out = np.nan #-9999
         else:
             out = np.nan #-9999
         return out
+
 
     # find freezeup end date.
     ordinal_days_freezeup_end = np.zeros_like(arr[0,...].astype(np.float32))
@@ -91,6 +120,7 @@ def freezeup_end( ds_sic, winter_mean, freezeup_start_arr, year ):
 
     # mask it
     ordinal_days_freezeup_end[ mask ] = np.nan
+
     return ordinal_days_freezeup_end
 
 def breakup_start( ds_sic, winter_mean, winter_std, summer_mean, year ):
@@ -100,6 +130,8 @@ def breakup_start( ds_sic, winter_mean, winter_std, summer_mean, year ):
     # get daily values for the time range in Mark's Algo (Feb.1 is Feb.14 - 14days search window)
     daily_vals = ds_sic.sel( time=slice(str(year)+'-02-01', str(year)+'-08-01') ).copy(deep=True)
     start_ordinalday = int( daily_vals.time.to_index().min().strftime('%j') ) + 13
+    # this is for determining the date if it goes beyond 8/1
+    last_ordinalday = int(daily_vals.time.to_index()[-1].strftime('%j'))
     end_ordinalday = int(pd.Timestamp.strptime(str(year)+'-08-01', '%Y-%m-%d').strftime('%j')) # 8/1
     times,rows,cols = daily_vals.shape
     
@@ -135,8 +167,9 @@ def breakup_start( ds_sic, winter_mean, winter_std, summer_mean, year ):
     summer = summer_mean.sel(year=int(year)).copy(deep=True)
     ordinal_days_breakup_start[ np.where(summer > .40) ] = np.nan
 
-    # if the day chosen is the last day of the time window, make it NA
+    # if the day chosen is the last day of the time window (or beyond), make it NA <-- new from Hajo
     ordinal_days_breakup_start[ ordinal_days_breakup_start + 1 == end_ordinalday ] = np.nan
+    # ordinal_days_breakup_start[ ordinal_days_breakup_start == end_ordinalday ] = np.nan
     return ordinal_days_breakup_start
 
 def breakup_end( ds_sic, summer_mean, summer_std, year ):
@@ -261,22 +294,22 @@ if __name__ == '__main__':
     end = args.end
     ncpus = args.ncpus
     
-    # # # # # # # # # # TESTING # # # # # # # # # 
-    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_hann3_north_smoothed.nc'
-    # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_ak_smoothed.nc'
-    begin = '1979'
-    end = '2017'
-    ncpus=64
-    # # # # # # # # # END TESTING # # # # # # # 
-        
-    # # # # # # # # # TESTING MARK # # # # # # # # # 
+    # # # # # # # # # # # TESTING # # # # # # # # # 
     # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/mark_test_data_march2019/nsidc_0051_sic_nasateam_1978-2013_Alaska_testcase_oldseries.nc'
+    # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2018_north_smoothed.nc'
+    # # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/smoothed/NetCDF/nsidc_0051_sic_nasateam_1978-2017_ak_smoothed.nc'
     # begin = '1979'
-    # end = '2013'
-    # ncpus = 32
-    # # # # # # # # END TESTING # # # # # # # 
+    # end = '2018'
+    # ncpus = 64
+    # # # # # # # # # # END TESTING # # # # # # # 
+        
+    # # # # # # # # TESTING MARK # # # # # # # # # 
+    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/mark_test_data_march2019/nsidc_0051_sic_nasateam_1978-2013_Alaska_testcase_oldseries.nc'
+    begin = '1979'
+    end = '2013'
+    ncpus = 32
+    # # # # # # # END TESTING # # # # # # # 
 
     np.warnings.filterwarnings('ignore') # filter annoying warnings.
 
@@ -340,6 +373,13 @@ if __name__ == '__main__':
     stacked = { metric:np.array([fubu_years[year][metric] for year in years ]) for metric in metrics }
     ds_fubu = make_xarray_dset_years( stacked, years, ds.coords, transform )
     out_fn = os.path.join( base_path, 'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_north_smoothed_fubu_dates.nc'.format(str(begin), str(end), suffix))
+
+    # make the output dir if needed:
+    dirname = os.path.dirname(out_fn)
+    if not os.path.exists(dirname):
+        _ = os.makedirs(dirname)
+    
+    # dump to disk
     ds_fubu.to_netcdf( out_fn, format='NETCDF4')
 
     # make averages in ordinal day across all fu/bu
@@ -348,14 +388,21 @@ if __name__ == '__main__':
 
     # write the average dates (clim) to a NetCDF
     ds_fubu_avg = make_xarray_dset_mean( averages, ds.coords, transform )
-    ds_fubu_avg.to_netcdf( os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_north_smoothed_fubu_dates_mean.nc'.format(begin, end, suffix)), format='NETCDF4' )
+
+    output_filename = os.path.join(base_path,'outputs','NetCDF','nsidc_0051_sic_nasateam_{}-{}{}_north_smoothed_fubu_dates_mean.nc'.format(begin, end, suffix))
+    # make the output dir if needed:
+    dirname = os.path.dirname(output_filename)
+    if not os.path.exists(dirname):
+        _ = os.makedirs(dirname)
+    
+    ds_fubu_avg.to_netcdf( output_filename, format='NETCDF4' )
 
     # # # show it not spatially warped... -- for testing....
     # output_filename = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/PNG/freezup_avg_allyears_ordinal.png'
     # show_2D_array_aspatial( averages['freezeup_end'], output_filename )
 
     # Make a raster with the outputs
-    template_fn = os.path.join(base_path,'prepped','north','1981','nt_19810101_n07_v1-1_n.tif')
+    template_fn = os.path.join(base_path,'prepped','north','daily','nt_19810101_n07_v1-1_n.tif')
     with rasterio.open( template_fn ) as tmp:
         meta = tmp.meta
 
@@ -363,6 +410,7 @@ if __name__ == '__main__':
         arr = averages[ metric ]
 
         output_filename = os.path.join(base_path,'outputs','GTiff','{}_avg_{}-{}{}_ordinal_north_smoothed.tif'.format(metric, begin, end, suffix))
+        # make the output dir if needed:
         dirname = os.path.dirname(output_filename)
         if not os.path.exists(dirname):
             _ = os.makedirs(dirname)
