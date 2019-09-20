@@ -196,7 +196,6 @@ if __name__ == '__main__':
     import multiprocessing as mp
     import argparse
     from scipy.ndimage import generic_filter
-    # from scipy import LowLevelCallable
 
     # parse some args
     parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
@@ -208,10 +207,10 @@ if __name__ == '__main__':
     base_path = args.base_path
     ncpus = args.ncpus
 
-    # # # TESTING
-    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    ncpus = 32
-    # # # # # 
+    # # # # TESTING
+    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    # ncpus = 32
+    # # # # # # 
 
     # list all data
     input_path = os.path.join( base_path,'prepped','north' )
