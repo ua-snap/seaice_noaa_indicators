@@ -10,7 +10,7 @@ numpy==1.16.4
 pandas==0.24.2
 pyproj==1.9.5.1
 rasterio==1.0.21
-requests==2.18.4
+requests
 Rtree==0.8.3
 scipy==0.19.1
 seaborn==0.8.1
