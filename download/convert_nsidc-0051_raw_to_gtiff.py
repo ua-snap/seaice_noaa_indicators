@@ -24,9 +24,9 @@ def convert_GTiff( fn, output_path ):
 
     dirname, basename = os.path.split( fn )
     out_tif = basename.replace('.bin', '.tif')
-    year = os.path.basename(dirname)
+    # year = os.path.basename(dirname)
 
-    out_path = os.path.join(output_path, year)
+    out_path = os.path.join(output_path, 'north')
     try:
         if not os.path.exists( out_path ):
             os.makedirs( out_path )
@@ -99,51 +99,34 @@ if __name__ == '__main__':
     import argparse
 
     # parse some args
-    parser = argparse.ArgumentParser( description='download / convert NSIDC-0051 Dailies' )
-    parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="parent directory to store sub-dirs of NSIDC_0051 data downloaded and converted to GTiff" )
+    parser = argparse.ArgumentParser( description='Convert raw NSIDC-0051 Dailies' )
+    parser.add_argument( "-i", "--input_path", action='store', dest='input_path', type=str, help="directory path to NSIDC_0051 data downloaded using the NSIDC-0051 downloader script" )
+    parser.add_argument( "-o", "--output_path", action='store', dest='output_path', type=str, help="directory path to NSIDC_0051 data downloaded using the NSIDC-0051 downloader script" )
     parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
     
     # unpack the args
     args = parser.parse_args()
-    base_path = args.base_path
+    base_path = args.input_path
+    output_path = args.output_path
     ncpus = args.ncpus
 
-    # # # # FOR TESTING
+    # # # # # FOR TESTING
     # ncpus = 64
-    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # # # # # # # # # # 
-    
-    # # # DOWNLOAD ALL DAILY DATA NSIDC 0051
-    # [old version]
-    # print("Enter EarthData credentials")
-    # username = input("Username: ")
-    # password = getpass.getpass("Password: ")
-    # # username = "malindgren"
-    # # password = "*" # insert password here... This is the EarthData Login...
-
-    # url = 'https://daacdata.apps.nsidc.org/pub/DATASETS/nsidc0051_gsfc_nasateam_seaice/final-gsfc/north/daily'
-
-    # commanda = 'wget -nH --load-cookies ~/.urs_cookies --save-cookies ~/.urs_cookies --keep-session-cookies --no-check-certificate --auth-no-challenge=on -r --reject "index.html*" -np -e robots=off --user {} --password {} --no-parent '.format( username, password )
-    # commandb = url
-    # os.system( commanda+commandb )
+    # input_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/raw/daily'
+    # output_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051/prepped2'
+    # # # # # # # # # # # 
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # [new] way to download the data is via a Python script thatis returned to the user
-    #   when they order the data from this page...  The other site above is no longer 
-    #   updated as  frequently as this new order site...
-    #   GO HERE: https://nsidc.org/data/NSIDC-0051
+    #   when they order the data from this page...
+    #   GO HERE: https://nsidc.org/data/nsidc-0051
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-    # # setup the folder hierarchy
-    raw_path = os.path.join( base_path, 'raw' )
-    daily_path = os.path.join(raw_path, 'daily')
-    os.chdir( daily_path )
-    filenames = [ os.path.join(r,fn) for r,s,files in os.walk( daily_path ) for fn in files if fn.endswith( '.bin' )]
+    # list the filenames from input_path
+    filenames = [ os.path.join(r,fn) for r,s,files in os.walk( input_path ) for fn in files if fn.endswith( '.bin' )]
 
     pool = mp.Pool( ncpus )
-    f = partial( convert_GTiff, output_path=os.path.join(base_path,'prepped','north') )
+    f = partial( convert_GTiff, output_path=output_path )
     out = pool.map( f, filenames )
     pool.close()
     pool.join()
-
-    _ = os.system( 'rm -r {}'.format( os.path.join( base_path, 'pub' ) ) )
