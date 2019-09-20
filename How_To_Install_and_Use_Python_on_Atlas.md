@@ -12,17 +12,17 @@ ssh atlas.snap.uaf.edu
 mkdir ~/src
 mkdir ~/.localpython
 cd ~/src
-wget https://www.python.org/ftp/python/3.7.4/Python-3.7.4.tar.xz
+wget https://www.python.org/ftp/python/3.6.5/Python-3.6.5.tar.xz
 ```
 
 ### unzip 
 ```sh
-tar xvfJ Python-3.7.4.tar.xz
+tar xvfJ Python-3.6.5.tar.xz
 ```
 
 ### python3 installation / configuration
 ```sh
-cd ~/src/Python-3.7.4
+cd ~/src/Python-3.6.5
 make clean
 ./configure --prefix=/home/UA/malindgren/.localpython
 make
@@ -32,7 +32,7 @@ make install
 ## use the installation
 ### make a virtual environment where we will install some packages
 ```sh
-~/.localpython/bin/python3.7 -m venv ~/venv
+~/.localpython/bin/python3.6 -m venv ~/venv
 source ~/venv/bin/activate
 ```
 
