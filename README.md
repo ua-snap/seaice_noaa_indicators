@@ -1,4 +1,4 @@
-# Sea Ice NOAA Indicators: Data Processing Steps
+# Sea Ice NOAA Indicators
 
 This project aims to estimate Freeze/Break-up dates from NSIDC-0051 Version 001 Daily Time Series Data. Below are some steps involving how to run the codes therein.
 
