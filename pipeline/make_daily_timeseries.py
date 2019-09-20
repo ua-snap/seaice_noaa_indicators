@@ -6,12 +6,6 @@
 # # Author: Michael Lindgren (malindgren@alaska.edu)
 # # # # # # # # # # # # # # # # # # # # 
 
-# initial numba imports needed for the func load:
-from numba import cfunc, carray
-from numba.types import intc, intp, float64, voidptr
-from numba.types import CPointer
-
-
 def nan_helper( y ):
     '''
     Helper to handle indices and logical indices of NaNs.
