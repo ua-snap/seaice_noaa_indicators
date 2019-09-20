@@ -35,6 +35,12 @@ def interp_1d_along_axis( y ):
     y[nans] = np.interp( x(nans), x(~nans), y[~nans] )
     return y
 
+def interpolate(x):
+    if not np.isnan(x).all():
+        index = np.arange(len(x))
+        notnan = np.logical_not(np.isnan(x))
+        return np.interp(index, index[notnan], x[notnan])
+
 def make_datetimes( timestr ):
     # timestr = '19790703'
     year = int(timestr[:4])
@@ -43,6 +49,10 @@ def make_datetimes( timestr ):
     return dt.datetime(year,month,day)
 
 def open_raster( fn ):
+    ''' 
+    open a raster using `rasterio` and return
+    the `numpy` array representing band 1
+    '''
     with rasterio.open( fn ) as rst:
         arr = rst.read(1)
     return arr
@@ -123,40 +133,32 @@ def make_xarray_dset( arr, times, rasterio_meta_dict ):
     return ds
 
 def mean_filter_2D( arr, footprint ):
+    ''' 
+    2D mean filter that overlooks np.nan and -9999 masks
+    while averaging across the footprint window.
+
+    input is a 2D array and footprint
+
+    output is a smoothed 2D array
+    '''
     from scipy.ndimage import generic_filter
+
+    indmask = np.where(arr == -9999)
+    indnodata = np.where(np.isnan(arr) == True)
+    arr[indmask] = np.nan # make mask nodata 
     out = generic_filter( arr, np.nanmean, footprint=footprint, origin=0 )
-    out[np.isnan(arr)] = np.nan
+    out[indmask] = -9999 # mask
+    out[indnodata] = np.nan # nodata
     return out
 
-# def mean_filter_2D(arr, size):
-#     from scipy.ndimage import uniform_filter
-#     return uniform_filter(arr, size=3, mode='constant')
+def run_meanfilter(x):
+    return mean_filter_2D( *x )
 
-def smooth2( x, window_len, window ):
-    ''' [ currently unused ]
-    hanning smooth the data along the time axis... this is one of the versions
-    '''
-    from scipy import signal
-    if window == 'flat': # moving average
-        win=np.ones(window_len,'d')
-    else:
-        # win = signal.hann( window_len )
-        windows = { 'hanning':np.hanning, 'hamming':np.hamming, 'bartlett':np.bartlett, 'blackman':np.blackman }
-        win = windows[ window ]( window_len )
-    filtered = signal.convolve(x, win, mode='same') / sum(win)
-    return filtered
-
-def smooth3( x ):
+def hanning_smooth( x ):
     ''' smoothing to mimick the smoothing from meetings with Mark/Hajo'''
     from scipy import signal
     win = np.array([0.25,0.5,0.25])
     return signal.convolve(x, win, mode='same') / sum(win)
-
-# def smooth4( x ):
-#     from scipy.ndimage import generic_filter
-#     win = np.array([0.25,0.5,0.25])
-#     return generic_filter( arr, np.nanmean, footprint=footprint, origin=0 )
-
 
 def stack_rasters( files, ncpus=32 ):
     pool = mp.Pool( ncpus )
@@ -165,6 +167,7 @@ def stack_rasters( files, ncpus=32 ):
     pool.join()
     return arr
 
+# # # MULTIPROCESSING APPROACHES TO GENERIC FILTER BUT DONT WORK DUE TO SOME OpenBLAS ISSUE.
 # def spatial_smooth( arr, footprint, ncpus=32 ):
 #     arr_list = [a.copy() for a in arr] # unpack 3d (time,rows,cols) array to 2d list
 #     f = partial( mean_filter_2D, footprint=footprint )
@@ -181,88 +184,7 @@ def stack_rasters( files, ncpus=32 ):
 #     pool.close()
 #     pool.join()
 #     return np.array(out_arr)
-
-def spatial_smooth_serial( arr, footprint ):
-    arr_list = [a for a in arr][:30]
-    f = partial( mean_filter_2D, footprint=footprint )
-    out_arr = np.array([f(i.copy()) for i in arr_list])
-    return out_arr
-
-
-@cfunc(intc(CPointer(float64), intp,
-        CPointer(float64), voidptr))
-def spatial_smooth_serial_numba(values_ptr, len_values, result, data):
-    ''' 
-    perform a mean filter over a window using scipy.ndimage.generic_filter
-    faster with this compiled numba function.
-    see here: 
-     https://ilovesymposia.com/2017/03/12/scipys-new-lowlevelcallable-is-a-game-changer
-    '''
-    values = carray(values_ptr, (len_values,), dtype=float64)
-    result[0] = values[0]
-    for v in values[1:]:
-        if not np.isnan(v):
-            result[0] = result[0] + v
-    result[0] = result[0] / len_values
-    return 1
-
-@cfunc(intc(CPointer(float64), intp,
-        CPointer(float64), voidptr))
-def spatial_smooth_serial_numba4(values_ptr, len_values, result, data):
-    ''' 
-    perform a mean filter over a window using scipy.ndimage.generic_filter
-    faster with this compiled numba function.
-    see here: 
-     https://ilovesymposia.com/2017/03/12/scipys-new-lowlevelcallable-is-a-game-changer
-    '''
-    values = carray(values_ptr, (len_values,), dtype=float64)
-    result[0] = values[0]
-
-    for v in values[1:]:
-        if not math.isnan(v) and v != -9999:
-            result[0] = result[0] + v
-        result[0] = result[0] / len_values
-
-    if values[4] == -9999:
-        result[0] = -9999
-
-    if math.isnan(values[4]):
-        result[0] = np.nan
-    return 1
-
-
-@cfunc(intc(CPointer(float64), intp,
-        CPointer(float64), voidptr))
-def spatial_smooth_serial_numba2(values_ptr, len_values, result, data):
-    ''' 
-    perform a mean filter over a window using scipy.ndimage.generic_filter
-    faster with this compiled numba function.
-    see here: 
-     https://ilovesymposia.com/2017/03/12/scipys-new-lowlevelcallable-is-a-game-changer
-    '''
-    import math
-    values = carray(values_ptr, (len_values,), dtype=float64)
-    if (values == -9999).all():
-        result[0] = -9999
-    elif np.math.isnan(values).all():
-        result[0] = np.nan
-    else:
-        result[0] = np.nanmean(values)
-    return 1
-
-@cfunc(intc(CPointer(float64), intp,
-        CPointer(float64), voidptr))
-def spatial_smooth_serial_numba3(values_ptr, len_values, result, data):
-    ''' 
-    perform a mean filter over a window using scipy.ndimage.generic_filter
-    faster with this compiled numba function.
-    see here: 
-     https://ilovesymposia.com/2017/03/12/scipys-new-lowlevelcallable-is-a-game-changer
-    '''
-    values = carray(values_ptr, (len_values,), dtype=float64)
-    result[0] = np.nanmean(values)
-    return 1
-
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 def make_output_dirs( dirname ):
     if not os.path.exists( dirname ):
@@ -280,7 +202,7 @@ if __name__ == '__main__':
     import multiprocessing as mp
     import argparse
     from scipy.ndimage import generic_filter
-    from scipy import LowLevelCallable
+    # from scipy import LowLevelCallable
 
     # parse some args
     parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
@@ -292,10 +214,10 @@ if __name__ == '__main__':
     base_path = args.base_path
     ncpus = args.ncpus
 
-    # # # # TESTING
-    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # ncpus = 32
-    # # # # # # 
+    # # # TESTING
+    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    ncpus = 32
+    # # # # # 
 
     # list all data
     input_path = os.path.join( base_path,'prepped','north' )
@@ -317,9 +239,8 @@ if __name__ == '__main__':
     ds = make_xarray_dset( arr.copy(), pd.DatetimeIndex(data_times), meta )
     da = ds['sic'].copy()
 
-    # # # interpolate the timeseries to regular dailies
+    # interpolate to daily
     da_interp = da.resample(time='1D').asfreq()
-
 
     # get a masks layer from the raw files.  These are all values > 250
     # ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ 
@@ -343,21 +264,6 @@ if __name__ == '__main__':
     
     # put the cleaned up data back into the stacked NetCDF
     da_interp.data = np.array(out_masked)
-
-    # # polemask = (dat != 251)
-    # dat[ np.where(dat > 100)] = np.nan
-    # da.data = dat.copy()
-    # del dat, arr # cleanup
-    
-    # # # # interpolate the timeseries to regular dailies
-    # da_interp = da.resample(time='1D').asfreq()
-    
-    def interpolate(x):
-        if not np.isnan(x).all():
-            index = np.arange(len(x))
-            notnan = np.logical_not(np.isnan(x))
-            return np.interp(index, index[notnan], x[notnan])
-
     da_interp.data = np.apply_along_axis(interpolate, axis=0, arr=da_interp).round(4)
 
     # spatially smooth the 2-D daily slices of data using a mean generic filter. (without any aggregation)
@@ -367,14 +273,26 @@ if __name__ == '__main__':
                     'queens':np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])}
 
     footprint = footprint_lu[ footprint_type ]
-    smoothed2 = np.array([generic_filter(a.copy(), LowLevelCallable(spatial_smooth_serial_numba3.ctypes), footprint=footprint) for a in da_interp.values])
-    smoothed2 = np.array([_maskit(i, mask) for i in smoothed2]).copy()
+    
+    # run using multiprocessing -- YMMV this is a tad flaky at times.
+    args = [(i.copy(), footprint) for i in da_interp.values]
+    pool = mp.Pool(10)
+    out = pool.map(run_meanfilter, args)
+    pool.close()
+    pool.join()
+
+    def _maskit(x, mask):
+        '''masking function'''
+        x[mask == True] = -9999
+        return x
+
+    # mask the spatial smoothed outputs with the mask at each 2D slice.
+    smoothed = np.array([_maskit(i, mask) for i in out]).copy()
 
     print('hanning smooth')
     n = 3 # perform 3 iterative smooths on the same series
-    # explicit method
     for i in range(n):
-        smoothed = np.apply_along_axis( smooth3, arr=smoothed, axis=0 )
+        smoothed = np.apply_along_axis( hanning_smooth, arr=smoothed, axis=0 )
 
     # make sure no values < 0, set to 0
     smoothed[np.where((smoothed < 0) & (~np.isnan(smoothed)))] = 0
@@ -382,16 +300,12 @@ if __name__ == '__main__':
     # make sure no values > 1, set to 1
     smoothed[np.where((smoothed > 1) & (~np.isnan(smoothed)))] = 1
 
-    # mask the spatial smoothed outputs with the mask at each 2D slice.
-    def _maskit(x, mask):
-        x[mask == True] = -9999
-        return x
-    
+    # mask it again to make sure the nodata and land are properly masked following hanning.
     smoothed = np.array([_maskit(i, mask) for i in smoothed]).copy()
 
-    # [TEST] make whatever np.nan's are left -9999's [TEST]
-    # this appears to occur only around a small mask around the landmask
-    smoothed[np.isnan(smoothed)] = -9999
+    # # make whatever np.nan's are left -9999's
+    # # this appears to occur only around a small mask around the landmask
+    # smoothed[np.isnan(smoothed)] = -9999
 
     # write this out as a GeoTiff
     out_fn = os.path.join( base_path,'smoothed','GTiff','nsidc_0051_sic_nasateam_{}-{}_north_smoothed.tif'.format(str(begin.year),str(end.year)) )
