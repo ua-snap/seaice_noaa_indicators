@@ -303,13 +303,13 @@ if __name__ == '__main__':
     # ncpus = 64
     # # # # # # # # # # END TESTING # # # # # # # 
         
-    # # # # # # # # TESTING MARK # # # # # # # # # 
-    base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/mark_test_data_march2019/nsidc_0051_sic_nasateam_1978-2013_Alaska_testcase_oldseries.nc'
-    begin = '1979'
-    end = '2013'
-    ncpus = 32
-    # # # # # # # END TESTING # # # # # # # 
+    # # # # # # # # # TESTING MARK # # # # # # # # # 
+    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
+    # fn = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/mark_test_data_march2019/nsidc_0051_sic_nasateam_1978-2013_Alaska_testcase_oldseries.nc'
+    # begin = '1979'
+    # end = '2013'
+    # ncpus = 32
+    # # # # # # # # END TESTING # # # # # # # 
 
     np.warnings.filterwarnings('ignore') # filter annoying warnings.
 
