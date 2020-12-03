@@ -1,0 +1,30 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+affine = "*"
+dask = "*"
+geopandas = "*"
+h5py = "*"
+ipython = "*"
+matplotlib = "*"
+numpy = "*"
+pandas = "*"
+pyproj = "*"
+rasterio = "*"
+requests = "*"
+scipy = "*"
+seaborn = "*"
+toolz = "*"
+xarray = "*"
+netCDF4 = "*"
+Rtree = "*"
+Shapely = "*"
+ipykernel = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.8"
