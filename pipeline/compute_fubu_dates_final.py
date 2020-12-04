@@ -144,15 +144,17 @@ def freezeup_end(ds_sic, winter_mean, freezeup_start_arr, year, ncpus):
     #     return out
 
     # select the current year values from Sept.1 - Dec.31
-    daily_vals = ds_sic.sel(time=slice(f"{year}-09-01", f"{year}-12-31")).copy(
-        deep=True
-    )
+#     daily_vals = ds_sic.sel(time=slice(f"{year}-09-01", f"{year}-12-31")).copy(
+#         deep=True
+#     )
+    daily_vals = ds_sic.sel(time=slice(f"{year}-09-01", f"{int(year) + 1}-02-28")).copy()
+
     start_ordinalday = int(daily_vals.time.to_index().min().strftime("%j"))
     times, nrows, ncols = daily_vals.shape
     # make a np.nan mask
     mask = np.isnan(daily_vals.isel(time=0).values)
     # remove 10% sic from winter mean values, set min threshold to 15%
-    threshold = winter_mean.sel(year=int(year) + 1).copy(deep=True).values - 0.10
+    threshold = winter_mean.sel(year=int(year) + 1).copy().values - 0.10
     threshold[threshold < 0.15] = 0.15
     # lower threshold to 50% if above
     threshold[threshold > 0.5] = 0.5
@@ -190,9 +192,9 @@ def breakup_start(ds_sic, winter_mean, winter_std, summer_mean, year):
     """Find the day that breakup starts"""
     # % "last day for which previous two weeks are above threshold -2std"
     # get daily values for the time range in Mark's Algo (Feb.1 is Feb.14 - 14days search window)
-    daily_vals = ds_sic.sel(time=slice(f"{year}-02-01", f"{year}-08-01")).copy(
-        deep=True
-    )
+    daily_vals = ds_sic.sel(time=slice(f"{year}-02-01", f"{year}-08-01")).copy()
+#         deep=True
+#     )
     start_ordinalday = int(daily_vals.time.to_index().min().strftime("%j")) + 13
     # this is for determining the date if it goes beyond 8/1
     last_ordinalday = int(daily_vals.time.to_index()[-1].strftime("%j"))
@@ -201,7 +203,7 @@ def breakup_start(ds_sic, winter_mean, winter_std, summer_mean, year):
     # make mask
     mask = np.isnan(daily_vals.isel(time=0).data)
     # threshold data
-    threshold = (winter_mean - (2 * winter_std)).sel(year=int(year)).copy(deep=True)
+    threshold = (winter_mean.sel(year=int(year)) - (2 * winter_std.sel(year=int(year)))).copy(deep=True)
     arr = (daily_vals > threshold).values
 
     # def alltrue(x):
@@ -242,7 +244,7 @@ def breakup_start(ds_sic, winter_mean, winter_std, summer_mean, year):
     return ordinal_days_breakup_start
 
 
-def breakup_end(ds_sic, summer_mean, summer_std, year):
+def breakup_end(ds_sic, summer_mean, summer_std, breakup_start_arr, year):
     """Compute the breakup ending date for a given year"""
     # % find the last day where conc exceeds summer value plus 1std
     # set a minimum threshold of 50%
@@ -256,17 +258,17 @@ def breakup_end(ds_sic, summer_mean, summer_std, year):
     #     else:
     #         return np.nan  # -9999
 
-    daily_vals = ds_sic.sel(time=slice(f"{year}-06-01", f"{year}-09-30")).copy(
-        deep=True
-    )
+    daily_vals = ds_sic.sel(time=slice(f"{year}-02-01", f"{year}-09-30")).copy()
+#         deep=True
+#     )
     start_ordinalday = int(daily_vals.time.to_index().min().strftime("%j"))
     # handle potential case of end_year not included in input series
     end_ordinalday = int(pd.to_datetime(f"{year}-09-30").strftime("%j"))
     times, rows, cols = daily_vals.shape
     # make a mask
     mask = np.where(np.isnan(daily_vals.isel(time=0).data))
-    summer = summer_mean.sel(year=int(year)).copy(deep=True)
-    mean_plus_std = summer + summer_std.copy(deep=True).sel(year=int(year))
+    summer = summer_mean.sel(year=int(year)).copy()
+    mean_plus_std = summer + summer_std.copy().sel(year=int(year))
     threshold = mean_plus_std.data.copy()
     # threshold[threshold < 0.15] = 0.15
     # need different threshold, too conservative
@@ -292,11 +294,14 @@ def breakup_end(ds_sic, summer_mean, summer_std, year):
         #first=False
     ).astype(np.float32)
     # if the summer mean is greater than 25% make it NA
-    ordinal_days_breakup_end[summer.values > 0.25] = np.nan
+    # ordinal_days_breakup_end[summer.values > 0.25] = np.nan
     # if all two week periods are below threshold make it NA
     ordinal_days_breakup_end[arr.all(axis=0)] = np.nan
     # if it is the last day of the time-window, (sept.30th) make it NA
     ordinal_days_breakup_end[ordinal_days_breakup_end >= end_ordinalday] = np.nan
+    ordinal_days_breakup_end[ordinal_days_breakup_end < start_ordinalday] = np.nan
+    # require breakup_start be defined 
+    ordinal_days_breakup_end[np.isnan(breakup_start_arr)] = np.nan
     # mask it
     ordinal_days_breakup_end[mask] = np.nan
     return ordinal_days_breakup_end
@@ -314,7 +319,9 @@ def wrap_fubu(year, ds_sic, summer_mean, summer_std, winter_mean, winter_std, nc
     breakup_start_arr = breakup_start(
         ds_sic, winter_mean, winter_std, summer_mean, year
     )
-    breakup_end_arr = breakup_end(ds_sic, summer_mean, summer_std, year)
+    breakup_end_arr = breakup_end(
+        ds_sic, summer_mean, summer_std, breakup_start_arr, year
+    )
     print(f"{year} complete.")
     return {
         "freezeup_start": freezeup_start_arr,
