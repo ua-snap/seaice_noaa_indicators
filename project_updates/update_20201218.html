@@ -13029,6 +13029,8 @@ body {
 div#notebook {
   overflow: visible;
   border-top: none;
+}div#notebook-container{
+  padding: 6ex 12ex 8ex 12ex;
 }@media print {
   div.cell {
     display: block;
@@ -13074,8 +13076,7 @@ div#notebook {
   <div tabindex="-1" id="notebook" class="border-box-sizing">
     <div class="container" id="notebook-container">
 
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div><div class="inner_cell">
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <h1 id="Sea-Ice-Indicators-Update">Sea Ice Indicators Update<a class="anchor-link" href="#Sea-Ice-Indicators-Update">&#182;</a></h1><h5 id="2020-12-18">2020-12-18<a class="anchor-link" href="#2020-12-18">&#182;</a></h5><p>This report presents a summary of the relevant pieces of the <a href="https://nsidc.org/data/NSIDC-0747/versions/1">NSIDC-0747 data set</a> and a comparison with the results of the most recent version of the algorithm for defining sea ice Freeze-up/Break-up (FUBU) dates.</p>
 
@@ -13091,8 +13092,7 @@ div#notebook {
 <div class="cell border-box-sizing code_cell rendered">
 
 </div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div><div class="inner_cell">
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <h1 id="NSIDC-0747-comparison">NSIDC-0747 comparison<a class="anchor-link" href="#NSIDC-0747-comparison">&#182;</a></h1><h2 id="Freeze-up">Freeze-up<a class="anchor-link" href="#Freeze-up">&#182;</a></h2><p>The analogs for freeze-up start and end appear to be ice "advance" (first day SIC increases above 15%) and "close" (first day SIC increases above 80%).</p>
 <h3 id="Totals-maps">Totals maps<a class="anchor-link" href="#Totals-maps">&#182;</a></h3>
@@ -13120,8 +13120,7 @@ div#notebook {
 </div>
 
 </div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div><div class="inner_cell">
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <h3 id="Mean-lagged-date-maps">Mean lagged-date maps<a class="anchor-link" href="#Mean-lagged-date-maps">&#182;</a></h3><p>These maps present the mean lag in days between the indicators computed from our current algorithm and the NSIDC-0747 data set, where both values are defined. I.e., the value displayed in each grid cell is calculated as:</p>
 <p>$mean(indicator_{current} - indicator_{NSIDC0747})$</p>
@@ -13150,8 +13149,7 @@ div#notebook {
 </div>
 
 </div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div><div class="inner_cell">
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <h3 id="Mean-date-histograms">Mean date histograms<a class="anchor-link" href="#Mean-date-histograms">&#182;</a></h3>
 </div>
@@ -13178,8 +13176,7 @@ div#notebook {
 </div>
 
 </div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div><div class="inner_cell">
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <h2 id="Break-up">Break-up<a class="anchor-link" href="#Break-up">&#182;</a></h2><p>The analogs for break-up start and end appear to be ice "retreating" (last day SIC drops below 15%) and "open" (last day SIC is above 80%).</p>
 <h3 id="Totals-maps">Totals maps<a class="anchor-link" href="#Totals-maps">&#182;</a></h3>
@@ -13207,8 +13204,7 @@ div#notebook {
 </div>
 
 </div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div><div class="inner_cell">
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <h3 id="Mean-lagged-date-maps">Mean lagged-date maps<a class="anchor-link" href="#Mean-lagged-date-maps">&#182;</a></h3>
 </div>
@@ -13235,8 +13231,7 @@ div#notebook {
 </div>
 
 </div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div><div class="inner_cell">
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <h3 id="Mean-date-histograms">Mean date histograms<a class="anchor-link" href="#Mean-date-histograms">&#182;</a></h3>
 </div>
