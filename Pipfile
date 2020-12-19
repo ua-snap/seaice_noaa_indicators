@@ -19,10 +19,11 @@ scipy = "*"
 seaborn = "*"
 toolz = "*"
 xarray = "*"
-netCDF4 = "*"
 Rtree = "*"
 Shapely = "*"
 ipykernel = "*"
+nbconvert = "*"
+netcdf4 = "*"
 
 [dev-packages]
 
