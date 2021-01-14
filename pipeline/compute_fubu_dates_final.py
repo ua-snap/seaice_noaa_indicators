@@ -301,7 +301,7 @@ def breakup_end(ds_sic, summer_mean, summer_std, breakup_start_arr, year):
     ordinal_days_breakup_end[ordinal_days_breakup_end >= end_ordinalday] = np.nan
     ordinal_days_breakup_end[ordinal_days_breakup_end < start_ordinalday] = np.nan
     # require breakup_start be defined 
-    ordinal_days_breakup_end[np.isnan(breakup_start_arr)] = np.nan
+    # ordinal_days_breakup_end[np.isnan(breakup_start_arr)] = np.nan
     # mask it
     ordinal_days_breakup_end[mask] = np.nan
     return ordinal_days_breakup_end
@@ -322,6 +322,13 @@ def wrap_fubu(year, ds_sic, summer_mean, summer_std, winter_mean, winter_std, nc
     breakup_end_arr = breakup_end(
         ds_sic, summer_mean, summer_std, breakup_start_arr, year
     )
+
+    # Require that both metrics be defined, otherwise neither
+    freezeup_start_arr[np.isnan(freezeup_end_arr)] = np.nan
+    freezeup_end_arr[np.isnan(freezeup_start_arr)] = np.nan
+    breakup_start_arr[np.isnan(breakup_end_arr)] = np.nan
+    breakup_end_arr[np.isnan(breakup_start_arr)] = np.nan
+
     print(f"{year} complete.")
     return {
         "freezeup_start": freezeup_start_arr,
