@@ -60,8 +60,8 @@ def freezeup_start(ds_sic, summer_mean, summer_std, year):
     #     else:
     #         return np.nan  # -9999
 
-    # slice 9/1 to endofyear...
-    daily_vals = ds_sic.sel(time=slice(f"{year}-09-01", f"{year}-12-31")).copy()
+    # Search 9/1 to 1/31 of following year
+    daily_vals = ds_sic.sel(time=slice(f"{year}-09-01", f"{int(year) + 1}-01-31")).copy()
     start_ordinalday = int(daily_vals.time.to_index().min().strftime("%j"))
     # threshold and set minimum value to .15 or 15% conc
     smean = summer_mean.sel(year=int(year)).copy()
