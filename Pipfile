@@ -24,6 +24,9 @@ Shapely = "*"
 ipykernel = "*"
 nbconvert = "*"
 netcdf4 = "*"
+xlrd = "*"
+descartes = "*"
+rasterstats = "*"
 
 [dev-packages]
 
