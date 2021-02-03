@@ -36,6 +36,8 @@ if __name__ == "__main__":
         out_dir,
         "--to",
         "html",
+        "--template",
+        "classic",
         "--no-prompt",
         "--no-input",
         "--execute",
