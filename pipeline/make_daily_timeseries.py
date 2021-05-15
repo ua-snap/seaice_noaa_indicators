@@ -1,13 +1,40 @@
-# # # # # # # # # # # # # # # # # # # # 
-# # make a full daily array with and 
-# # interpolate missing dates linearly
-# # 2D spatial / 1D profile hann smoothed
-# #
-# # Author: Michael Lindgren (malindgren@alaska.edu)
-# # # # # # # # # # # # # # # # # # # # 
+"""Make a full array of daily sea ice concentration values
 
-def nan_helper( y ):
-    '''
+Usage:
+    pipenv run python make_daily_timeseries.py -n <number of CPUs>
+    Script #3 of data pipeline
+
+Returns:
+    Smoothed daily NSIDC-0051 data written to 
+    $BASE_PATH/nsidc_0051/smoothed/
+
+Notes:
+    Interpolates missing dates linearly
+    (2D spatial / 1D profile hann smoothed)
+"""
+
+import argparse
+import os
+import math
+import numba
+import datetime as dt
+import multiprocessing as mp
+import numpy as np
+import pandas as pd
+import rasterio as rio
+import xarray as xr
+from affine import Affine
+from functools import partial
+from pathlib import Path
+from pyproj import Proj, transform
+from numba import cfunc, carray
+from numba.types import intc, CPointer, float64, intp, voidptr
+from scipy import LowLevelCallable
+from scipy.ndimage import generic_filter
+
+
+def nan_helper(y):
+    """
     Helper to handle indices and logical indices of NaNs.
     Input:
         - y, 1d numpy array with possible NaNs
@@ -20,14 +47,16 @@ def nan_helper( y ):
         >>> nans, x= nan_helper(y)
         >>> y[nans]= np.interp(x(nans), x(~nans), y[~nans])
         https://stackoverflow.com/questions/6518811/interpolate-nan-values-in-a-numpy-array
-    '''
-    return np.isnan( y ), lambda z: z.nonzero()[0]
+    """
+    return np.isnan(y), lambda z: z.nonzero()[0]
 
-def interp_1d_along_axis( y ):
-    ''' interpolate across 1D timeslices of a 3D array. '''
-    nans, x = nan_helper( y )
-    y[nans] = np.interp( x(nans), x(~nans), y[~nans] )
+
+def interp_1d_along_axis(y):
+    """ interpolate across 1D timeslices of a 3D array. """
+    nans, x = nan_helper(y)
+    y[nans] = np.interp(x(nans), x(~nans), y[~nans])
     return y
+
 
 def interpolate(x):
     if not np.isnan(x).all():
@@ -35,24 +64,27 @@ def interpolate(x):
         notnan = np.logical_not(np.isnan(x))
         return np.interp(index, index[notnan], x[notnan])
 
-def make_datetimes( timestr ):
+
+def make_datetimes(timestr):
     # timestr = '19790703'
     year = int(timestr[:4])
     month = int(timestr[4:6])
     day = int(timestr[6:])
-    return dt.datetime(year,month,day)
+    return dt.datetime(year, month, day)
 
-def open_raster( fn ):
-    ''' 
+
+def open_raster(fn):
+    """ 
     open a raster using `rasterio` and return
     the `numpy` array representing band 1
-    '''
-    with rasterio.open( fn ) as rst:
+    """
+    with rio.open(fn) as rst:
         arr = rst.read(1)
     return arr
 
-def coordinates( fn=None, meta=None, numpy_array=None, input_crs=None, to_latlong=False ):
-    '''
+
+def coordinates(fn=None, meta=None, numpy_array=None, input_crs=None, to_latlong=False):
+    """
     take a raster file as input and return the centroid coords for each 
     of the grid cells as a pair of numpy 2d arrays (longitude, latitude)
 
@@ -71,39 +103,35 @@ def coordinates( fn=None, meta=None, numpy_array=None, input_crs=None, to_latlon
         meshgrid of longitudes and latitudes
 
     borrowed from here: https://gis.stackexchange.com/a/129857
-    ''' 
-    
-    import rasterio
-    import numpy as np
-    from affine import Affine
-    from pyproj import Proj, transform
-
+    """
     if fn:
         # Read raster
-        with rasterio.open( fn ) as r:
+        with rio.open(fn) as r:
             T0 = r.transform  # upper-left pixel corner affine transform
-            p1 = Proj( r.crs )
-            A = r.read( 1 )  # pixel values
+            p1 = Proj(r.crs)
+            A = r.read(1)  # pixel values
 
     elif (meta is not None) & (numpy_array is not None):
         A = numpy_array
         if input_crs != None:
-            p1 = Proj( input_crs )
-            T0 = meta[ 'transform' ]
+            p1 = Proj(input_crs)
+            T0 = meta["transform"]
         else:
             p1 = None
-            T0 = meta[ 'transform' ]
+            T0 = meta["transform"]
     else:
-        BaseException( 'check inputs' )
+        BaseException("check inputs")
 
     # All rows and columns
     cols, rows = np.meshgrid(np.arange(A.shape[1]), np.arange(A.shape[0]))
     # Get affine transform for pixel centres
-    T1 = T0 * Affine.translation( 0.5, 0.5 )
+    T1 = T0 * Affine.translation(0.5, 0.5)
     # Function to convert pixel row/column index (from 0) to easting/northing at centre
-    rc2en = lambda r, c: ( c, r ) * T1
+    rc2en = lambda r, c: T1 * (c, r)
     # All eastings and northings -- this is much faster than np.apply_along_axis
-    eastings, northings = np.vectorize(rc2en, otypes=[np.float, np.float])(rows, cols)
+    eastings, northings = np.vectorize(rc2en, otypes=[np.float32, np.float32])(
+        rows, cols
+    )
 
     if to_latlong == False:
         return eastings, northings
@@ -112,54 +140,124 @@ def coordinates( fn=None, meta=None, numpy_array=None, input_crs=None, to_latlon
         longs, lats = transform(p1, p1.to_latlong(), eastings, northings)
         return longs, lats
     else:
-        BaseException( 'cant reproject to latlong without an input_crs' )
+        BaseException("cant reproject to latlong without an input_crs")
 
-def make_xarray_dset( arr, times, rasterio_meta_dict ):
+
+def make_xarray_dset(arr, times, rasterio_meta_dict):
     meta = rasterio_meta_dict
-    xc,yc = coordinates(meta=meta, numpy_array=arr[1,...])
-    attrs = {'proj4string':'EPSG:3411', 'proj_name':'NSIDC North Pole Stereographic', 
-            'affine_transform': str(list(meta['transform']))}
+    xc, yc = coordinates(meta=meta, numpy_array=arr[1, ...])
+    attrs = {
+        "proj4string": "EPSG:3411",
+        "proj_name": "NSIDC North Pole Stereographic",
+        "affine_transform": str(list(meta["transform"])),
+    }
 
-    ds = xr.Dataset({'sic':(['time','yc', 'xc'], arr)},
-                coords={'xc': ('xc', xc[0,]),
-                        'yc': ('yc', yc[:,0]),
-                        'time':times }, attrs=attrs )
+    ds = xr.Dataset(
+        {"sic": (["time", "yc", "xc"], arr)},
+        coords={"xc": ("xc", xc[0,]), "yc": ("yc", yc[:, 0]), "time": times},
+        attrs=attrs,
+    )
     return ds
 
-def mean_filter_2D( arr, footprint ):
-    ''' 
+
+# def mean_filter_2D( arr, footprint ):
+#     '''
+#     2D mean filter that overlooks np.nan and -9999 masks
+#     while averaging across the footprint window.
+
+#     input is a 2D array and footprint
+
+#     output is a smoothed 2D array
+#     '''
+#     from scipy.ndimage import generic_filter
+
+#     indmask = np.where(arr == -9999)
+#     indnodata = np.where(np.isnan(arr) == True)
+#     arr[indmask] = np.nan # make mask nodata
+#     out = generic_filter( arr, np.nanmean, footprint=footprint, origin=0 )
+#     out[indmask] = -9999 # mask
+#     out[indnodata] = np.nan # nodata
+                                                                                                                 
+#     return out
+
+
+def jit_filter_function(filter_function):
+    """Numba decorator for JIT-compiling numpy.nanmean
+
+    Notes:
+        Code borrowed from https://ilovesymposia.com/2017/03/15/prettier-lowlevelcallables-with-numba-jit-and-decorators/
+    """
+    jitted_function = numba.jit(filter_function, nopython=True)
+
+    @cfunc(intc(CPointer(float64), intp, CPointer(float64), voidptr))
+    def wrapped(values_ptr, len_values, result, data):
+        values = carray(values_ptr, (len_values,), dtype=float64)
+        result[0] = jitted_function(values)
+        return 1
+
+    return LowLevelCallable(wrapped.ctypes)
+
+
+@jit_filter_function
+def jit_nanmean(arr):
+    """JIT-compiiled numpy.nanmean"""
+    return np.nanmean(arr)
+
+
+def jit_mean_filter(arr, footprint):
+    """ 
     2D mean filter that overlooks np.nan and -9999 masks
     while averaging across the footprint window.
 
     input is a 2D array and footprint
 
     output is a smoothed 2D array
-    '''
-    from scipy.ndimage import generic_filter
-
+    """
     indmask = np.where(arr == -9999)
     indnodata = np.where(np.isnan(arr) == True)
-    arr[indmask] = np.nan # make mask nodata 
-    out = generic_filter( arr, np.nanmean, footprint=footprint, origin=0 )
-    out[indmask] = -9999 # mask
-    out[indnodata] = np.nan # nodata
+    arr[indmask] = np.nan  # make mask nodata
+    out = generic_filter(arr, jit_nanmean, footprint=footprint, origin=0)
+    out[indmask] = -9999  # mask
+    out[indnodata] = np.nan  # nodata
+
     return out
 
-def run_meanfilter(x):
-    return mean_filter_2D( *x )
 
-def hanning_smooth( x ):
-    ''' smoothing to mimick the smoothing from meetings with Mark/Hajo'''
+def run_jit_mean_filter(arr, footprint):
+    """Run loop of ji_mean_filter_2D"""
+    return np.array([jit_mean_filter(a, footprint) for a in arr])
+
+
+def chunkit(size, n_chunks):
+    """get slices of array indices that approximately equally partition the array"""
+    chunk_length = math.floor(size / n_chunks)
+    chunk_slices = [
+        slice(x * chunk_length, (x + 1) * chunk_length) for x in range(n_chunks - 1)
+    ]
+    chunk_slices.append(slice((n_chunks - 1) * chunk_length, size))
+
+    return chunk_slices
+
+
+# def run_meanfilter(x):
+#     return mean_filter_2D( *x )
+
+
+def hanning_smooth(x):
+    """ smoothing to mimick the smoothing from meetings with Mark/Hajo"""
     from scipy import signal
-    win = np.array([0.25,0.5,0.25])
-    return signal.convolve(x, win, mode='same') / sum(win)
 
-def stack_rasters( files, ncpus=32 ):
-    pool = mp.Pool( ncpus )
-    arr = np.array( pool.map( open_raster, files ) )
+    win = np.array([0.25, 0.5, 0.25])
+    return signal.convolve(x, win, mode="same") / sum(win)
+
+
+def stack_rasters(files, ncpus=32):
+    pool = mp.Pool(ncpus)
+    arr = np.array(pool.map(open_raster, files))
     pool.close()
     pool.join()
     return arr
+
 
 # # # MULTIPROCESSING APPROACHES TO GENERIC FILTER BUT DONT WORK DUE TO SOME OpenBLAS ISSUE.
 # def spatial_smooth( arr, footprint, ncpus=32 ):
@@ -178,66 +276,55 @@ def stack_rasters( files, ncpus=32 ):
 #     pool.close()
 #     pool.join()
 #     return np.array(out_arr)
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-
-def make_output_dirs( dirname ):
-    if not os.path.exists( dirname ):
-        _ = os.makedirs( dirname )
-    return dirname
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-if __name__ == '__main__':
-    import os, rasterio
-    import datetime as dt
-    import pandas as pd
-    import numpy as np
-    import xarray as xr
-    from functools import partial
-    import multiprocessing as mp
-    import argparse
-    from scipy.ndimage import generic_filter
-
+if __name__ == "__main__":
     # parse some args
-    parser = argparse.ArgumentParser( description='stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year.' )
-    parser.add_argument( "-b", "--base_path", action='store', dest='base_path', type=str, help="input hourly directory containing the NSIDC_0051 data converted to GTiff" )
-    parser.add_argument( "-n", "--ncpus", action='store', dest='ncpus', type=int, help="number of cpus to use" )
-    
+    parser = argparse.ArgumentParser(
+        description="stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year."
+    )
+    parser.add_argument(
+        "-n",
+        "--ncpus",
+        action="store",
+        dest="ncpus",
+        type=int,
+        help="number of cpus to use",
+    )
+
     # unpack args
     args = parser.parse_args()
-    base_path = args.base_path
     ncpus = args.ncpus
 
-    # # # # TESTING
-    # base_path = '/workspace/Shared/Tech_Projects/SeaIce_NOAA_Indicators/project_data/nsidc_0051'
-    # ncpus = 32
-    # # # # # # 
-
     # list all data
-    input_path = os.path.join( base_path,'prepped','north' )
-    files = sorted([ os.path.join(r,fn) for r,s,files in os.walk(input_path) for fn in files if fn.endswith('.tif') ])
-    data_times = [ make_datetimes( os.path.basename(fn).split('.')[0].split('_')[1] ) for fn in files ]
+    base_dir = Path(os.getenv("BASE_DIR"))
+
+    in_dir = base_dir.joinpath("nsidc_0051/prepped")
+    fps = sorted(list(in_dir.glob("*")))
+    data_times = [make_datetimes(fp.name.split(".")[0].split("_")[1]) for fp in fps]
 
     # date-fu for filenames and slicing
     begin = data_times[0]
     end = data_times[-1]
-    begin_str = begin.strftime('%Y-%m-%d')
-    end_str = end.strftime('%Y-%m-%d')
+    begin_str = begin.strftime("%Y-%m-%d")
+    end_str = end.strftime("%Y-%m-%d")
 
     # stack the irregularly spaced data to a netcdf
-    with rasterio.open( files[0] ) as template:
+    with rio.open(fps[0]) as template:
         meta = template.meta.copy()
-        height,width = template.shape
+        height, width = template.shape
 
-    arr = stack_rasters( files, ncpus=ncpus )
-    ds = make_xarray_dset( arr.copy(), pd.DatetimeIndex(data_times), meta )
-    da = ds['sic'].copy()
+    arr = stack_rasters(fps, ncpus=ncpus)
+    ds = make_xarray_dset(arr.copy(), pd.DatetimeIndex(data_times), meta)
+    da = ds["sic"].copy()
 
     # interpolate to daily
-    da_interp = da.resample(time='1D').asfreq()
+    da_interp = da.resample(time="1D").asfreq()
 
     # get a masks layer from the raw files.  These are all values > 250
-    # ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ ------------ 
-    # 251 Circular mask used in the Arctic to cover the irregularly-shaped data 
+    # ------------ ------------ ------------ ------------ ------------ ------------ ------------
+    # 251 Circular mask used in the Arctic to cover the irregularly-shaped data
     #       gap around the pole (caused by the orbit inclination and instrument swath)
     # 252 Unused
     # 253 Coastlines
@@ -254,38 +341,45 @@ if __name__ == '__main__':
     for i in dat:
         i[mask] = np.nan
         out_masked = out_masked + [i]
-    
+
     # put the cleaned up data back into the stacked NetCDF
     da_interp.data = np.array(out_masked)
     da_interp.data = np.apply_along_axis(interpolate, axis=0, arr=da_interp).round(4)
 
     # spatially smooth the 2-D daily slices of data using a mean generic filter. (without any aggregation)
-    print('spatial smooth')
-    footprint_type = 'queens'
-    footprint_lu = {'rooks':np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]]), 
-                    'queens':np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])}
+    print("spatial smooth")
+    footprint_type = "queens"
+    footprint_lu = {
+        "rooks": np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]]),
+        "queens": np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]]),
+    }
 
-    footprint = footprint_lu[ footprint_type ]
-    
-    # run using multiprocessing -- YMMV this is a tad flaky at times.
-    args = [(i.copy(), footprint) for i in da_interp.values]
-    pool = mp.Pool(10)
-    out = pool.map(run_meanfilter, args)
-    pool.close()
-    pool.join()
+    footprint = footprint_lu[footprint_type]
+
+    # 'run using multiprocessing -- YMMV this is a tad flaky at times.'
+    # ^^ comment from original author, not sure where flakiness manifested
+    # previously but left this note anyway.
+
+    #   Some profiling revealed that paritioning the interpolated array
+    # and looping over it with 10 cores on Atlas was about optimal.
+    filter_ncpus = 10
+    filter_slices = chunkit(da_interp.values.shape[0], filter_ncpus)
+    args = [(da_interp.values[sl], footprint) for sl in filter_slices]
+    with mp.Pool(filter_ncpus) as pool:
+        out = pool.starmap(run_jit_mean_filter, args)
 
     def _maskit(x, mask):
-        '''masking function'''
+        """masking function"""
         x[mask == True] = -9999
         return x
 
     # mask the spatial smoothed outputs with the mask at each 2D slice.
-    smoothed = np.array([_maskit(i, mask) for i in out]).copy()
+    smoothed = np.array([_maskit(i, mask) for i in np.concatenate(out)]).copy()
 
-    print('hanning smooth')
-    n = 3 # perform 3 iterative smooths on the same series
+    print("hanning smooth")
+    n = 3  # perform 3 iterative smooths on the same series
     for i in range(n):
-        smoothed = np.apply_along_axis( hanning_smooth, arr=smoothed, axis=0 )
+        smoothed = np.apply_along_axis(hanning_smooth, arr=smoothed, axis=0)
 
     # make sure no values < 0, set to 0
     smoothed[np.where((smoothed < 0) & (~np.isnan(smoothed)))] = 0
@@ -296,28 +390,19 @@ if __name__ == '__main__':
     # mask it again to make sure the nodata and land are properly masked following hanning.
     smoothed = np.array([_maskit(i, mask) for i in smoothed]).copy()
 
-    # # make whatever np.nan's are left -9999's
-    # # this appears to occur only around a small mask around the landmask
-    # smoothed[np.isnan(smoothed)] = -9999
-
-    # write this out as a GeoTiff
-    out_fn = os.path.join( base_path,'smoothed','GTiff','nsidc_0051_sic_nasateam_{}-{}_north_smoothed.tif'.format(str(begin.year),str(end.year)) )
-    _ = make_output_dirs( os.path.dirname(out_fn) )
-    meta.update(count=smoothed.shape[0], compress='lzw')
-    with rasterio.open( out_fn, 'w', **meta ) as out:
-        out.write( smoothed.astype(np.float32) )
-
     # write it out as a NetCDF
     out_ds = da_interp.copy(deep=True)
     out_ds.values = smoothed.astype(np.float32)
-    out_ds = out_ds.to_dataset( name='sic' )
+    out_ds = out_ds.to_dataset(name="sic")
     out_ds.attrs = ds.attrs
 
     # output encoding
     encoding = out_ds.sic.encoding.copy()
-    encoding.update({ 'zlib':True, 'comp':5, 'contiguous':False, 'dtype':'float32' })
+    encoding.update({"zlib": True, "comp": 5, "contiguous": False, "dtype": "float32"})
     out_ds.sic.encoding = encoding
 
-    out_fn = os.path.join( base_path,'smoothed','NetCDF','nsidc_0051_sic_nasateam_{}-{}_north_smoothed.nc'.format(str(begin.year),str(end.year)) )
-    _ = make_output_dirs( os.path.dirname(out_fn) )
-    out_ds.to_netcdf( out_fn , format='NETCDF4' )
+    out_fp = in_dir.parent.joinpath(
+        f"smoothed/nsidc_0051_sic_{str(begin.year)}-{str(end.year)}_smoothed.nc"
+    )
+    out_fp.parent.mkdir(exist_ok=True, parents=True)
+    out_ds.to_netcdf(out_fp, format="NETCDF4")

@@ -27,6 +27,8 @@ netcdf4 = "*"
 xlrd = "*"
 descartes = "*"
 rasterstats = "*"
+rioxarray = "*"
+numba = "*"
 
 [dev-packages]
 

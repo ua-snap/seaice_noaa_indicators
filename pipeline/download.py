@@ -1,38 +1,33 @@
 """Download data sets from NSIDC
 
+Usage:
+    pipenv run python download.py [-c]
+    Script #1 of data pipeline
+
 Returns:
-    Downloaded data sets in BASE_DIR/short_name
+    NSIDC-0051 daily data files written to $BASE_DIR/nsidc_0051/raw/daily
+    NSIDC-0747 data file written $BASE_DIR/nsidc_0747 
 
 Notes:
     The script will first search Earthdata for all matching files.
     The user needs to store Earthdata credentials in $HOME/.netrc
     The .netrc file should have the following format:
     machine urs.earthdata.nasa.gov login myusername password mypassword
-    This script was adapted from the nsidc-download script
+
+    This script was adapted from the nsidc-download script.
+    It was originally tested to work with Python 2 as well
+    which is why it is longer than needed, plan to re-implement in
+    python 3 exclusively if time allows.
 """
 
-#!/usr/bin/env python
-# ------------------------------------------------------------------------------
-# NSIDC Data Download Script
-# Tested in Python 2.7 and Python 3.4, 3.6, 3.7
-#
-# To run the script at a Linux, macOS, or Cygwin command-line terminal:
-#   $ python nsidc-data-download.py
-#
-# On Windows, open Start menu -> Run and type cmd. Then type:
-#     python nsidc-data-download.py
-#
-# The script will first search Earthdata for all matching files.
-# You will then be prompted for your Earthdata username/password
-# and the script will download the matching files.
-#
-# If you wish, you may store your Earthdata username/password in a .netrc
-# file in your $HOME directory and the script will automatically attempt to
-# read this file. The .netrc file should have the following format:
-#    machine urs.earthdata.nasa.gov login myusername password mypassword
-# where 'myusername' and 'mypassword' are your Earthdata credentials.
-
-import argparse, base64, itertools, json, netrc, os, ssl, sys
+import argparse
+import base64
+import itertools
+import json
+import netrc
+import os
+import ssl
+import sys
 from getpass import getpass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -41,7 +36,7 @@ from urllib.request import urlopen, Request, build_opener, HTTPCookieProcessor
 
 version = "1"
 time_start = "1978-10-26T00:00:00Z"
-time_end = "2018-12-31T23:59:59Z"
+time_end = "2019-12-31T23:59:59Z"
 polygon = ""
 filename_filter = "*"
 
@@ -164,24 +159,24 @@ def cmr_download(urls, out_dir):
         if not credentials and urlparse(url).scheme == "https":
             credentials = get_credentials(url)
 
-        filename = os.path.join(out_dir, os.path.basename(url))
+        fp = out_dir.joinpath(Path(url).name)
         print(
             "{0}/{1}: {2}".format(
-                str(index).zfill(len(str(url_count))), url_count, filename
+                str(index).zfill(len(str(url_count))), url_count, fp
             )
         )
 
         try:
             # In Python 3 we could eliminate the opener and just do 2 lines:
             # resp = requests.get(url, auth=(username, password))
-            # open(filename, 'wb').write(resp.content)
+            # open(fp, 'wb').write(resp.content)
             print(url)
             req = Request(url)
             if credentials:
                 req.add_header("Authorization", "Basic {0}".format(credentials))
             opener = build_opener(HTTPCookieProcessor())
             data = opener.open(req).read()
-            open(filename, "wb").write(data)
+            open(fp, "wb").write(data)
         except HTTPError as e:
             print("HTTP error {0}, {1}".format(e.code, e.reason))
         except URLError as e:
@@ -191,7 +186,7 @@ def cmr_download(urls, out_dir):
         except KeyboardInterrupt:
             quit()
 
-    return filename
+    return fp
 
 
 def cmr_filter_urls(search_results):
@@ -285,59 +280,65 @@ def cmr_search(
         quit()
     
 
-def main():
-
+    
+if __name__ == "__main__":
+    # download NSIDC-0051 first, NSIDC-0747 second
+    # check what is already present locally before downloading
+    
     # Supply some default search parameters, just for testing purposes.
     # These are only used if the parameters aren't filled in up above.
     global version, time_start, time_end, polygon, filename_filter
 
-    # short_name = 'NSIDC-0051'
-
     parser = argparse.ArgumentParser(description="Download NSIDC data")
     parser.add_argument(
-        "-d",
-        "--data-set",
-        action="store",
-        dest="short_name",
-        type=str,
-        help=(
-            "Name of data set to download ('Data Set ID'). "
-            "One of 'NSDIC-0051' or 'NSIDC-0747"
-        ),
+        "-c",
+        "--clobber",
+        action="store_true",
+        dest="clobber",
+        default=False,
+        help=("Flag to download all data, overwriting any local data"),
     )
+    
     # unpack args
     args = parser.parse_args()
-    short_name = args.short_name
-
-    if "short_name" in short_name:
-        short_name = "MOD10A2"
-        version = "6"
-        time_start = "2001-01-01T00:00:00Z"
-        time_end = "2019-03-07T22:09:38Z"
-        polygon = "-109,37,-102,37,-102,41,-109,41,-109,37"
-        filename_filter = "*A2019*"  # '*2019010204*'
-
+    clobber = args.clobber
+    
     base_dir = Path(os.getenv("BASE_DIR"))
-    dsid_name = "_".join(short_name.lower().split("-"))
-    out_dir = base_dir.joinpath(dsid_name)
-    out_dir.mkdir(exist_ok=True)
+    out_0051_dir = base_dir.joinpath("nsidc_0051/raw/daily")
+    out_0051_dir.mkdir(exist_ok=True, parents=True)
+    
+    urls = cmr_search(
+        "NSIDC-0051",
+        version,
+        time_start,
+        time_end,
+        polygon=polygon,
+        filename_filter=filename_filter,
+    )
+    
+    # dunno what these new files are yet, but remove them
+    urls = [url for url in urls if "s.bin" not in Path(url).name]
+    # also filter out monthly data urls
+    urls = [url for url in urls if len(Path(url).name.split("_")[1]) == 8]  
 
-    if short_name == "NSIDC-0051":
-        urls = cmr_search(
-            short_name,
-            version,
-            time_start,
-            time_end,
-            polygon=polygon,
-            filename_filter=filename_filter,
-        )
-        out_fp = cmr_download(urls, out_dir)
-    elif short_name == "NSIDC-0747":
-        url = "https://daacdata.apps.nsidc.org/pub/DATASETS/nsidc0747_seaice_melt_indicators_v1/arctic_seaice_climate_indicators_nh_v01r01_1979-2017.nc"
-        out_fp = cmr_download([url], out_dir)
-        print(f"{short_name} data saved to {out_fp}")
+    if not clobber:
+        # filter out already downloaded files
+        local_fps = [fp.name for fp in list(out_0051_dir.glob("*"))]
+        urls = [url for url in urls if Path(url).name not in local_fps]
+
+    _ = cmr_download(urls, out_0051_dir)
+    print(f"NSIDC-0051 data written to {out_0051_dir}")
+
+    # next, download NSIDC-0747
+    out_0747_dir = base_dir.joinpath("nsidc_0747")
+    out_0747_dir.mkdir(exist_ok=True)
+    url = "https://daacdata.apps.nsidc.org/pub/DATASETS/nsidc0747_seaice_melt_indicators_v1/arctic_seaice_climate_indicators_nh_v01r01_1979-2017.nc"
+    if not clobber:
+        if not out_0747_dir.joinpath(Path(url).name).exists():
+            out_0747_fp = cmr_download([url], out_0747_dir)
+            print(f"NSIDC-0747 written to {out_0747_fp}")
+        else:
+            print("NSIDC-0747 already preent in $BASE_DIR")
     else:
-        print("Invalid Data Set ID provided")
-
-if __name__ == "__main__":
-    main()
+        out_0747_fp = cmr_download([url], out_0747_dir)
+        print(f"NSIDC-0747 written to {out_0747_fp}")

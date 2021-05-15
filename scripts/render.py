@@ -22,12 +22,22 @@ if __name__ == "__main__":
         type=str,
         help=("Directory to save converted nb"),
     )
+    parser.add_argument(
+        "-of",
+        "--output-format",
+        action="store",
+        dest="out_format",
+        type=str,
+        default="html",
+        help=("Output format of notebook"),
+    )
 
     # unpack args
     args = parser.parse_args()
     fp = args.fp
     out_dir = args.out_dir
-
+    out_format = args.out_format
+    
     command = [
         "jupyter",
         "nbconvert",
@@ -35,11 +45,14 @@ if __name__ == "__main__":
         "--output-dir",
         out_dir,
         "--to",
-        "html",
-        "--template",
-        "classic",
+        out_format,
         "--no-prompt",
         "--no-input",
         "--execute",
     ]
+    
+    if out_format == "html":
+        command.append("--template")
+        command.append("classic")
+    
     subprocess.Popen(command)
