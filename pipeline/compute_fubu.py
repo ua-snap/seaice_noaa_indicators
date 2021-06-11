@@ -179,6 +179,7 @@ def breakup_start(ds_sic, winter_mean, winter_std, summer_mean, year):
     threshold = (
         winter_mean.sel(year=int(year)) - (2 * winter_std.sel(year=int(year)))
     ).copy(deep=True)
+    threshold.data[threshold.data < 0.15] = 0.15
     arr = (daily_vals > threshold).values
 
     # def alltrue(x):
