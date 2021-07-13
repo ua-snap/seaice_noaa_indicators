@@ -5,7 +5,7 @@ Usage:
     Script #4 of data pipeline
 
 Returns:
-    FUBU dates written to $BASE_DIR/nsidc_0051/outputs/nsidc_0051_<begin(YYYY)>-<end(YYYY)>_fubu.nc
+    CF-compliant FUBU dates dataset written to $OUTPUT_DIR/arctic_seaice_fubu_dates_<begin(YYYY)>-<end(YYYY)>.nc
 """
 
 import argparse
@@ -17,6 +17,7 @@ import xarray as xr
 from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
+from pyproj.crs import CRS
 
 
 def get_summer(month):
@@ -41,16 +42,6 @@ def get_doy(x, start_ordinalday, first=True):
 
 def freezeup_start(ds_sic, summer_mean, summer_std, year):
     """Find first instance of sic exceeding summer mean + 1 std dev"""
-
-    # def first_freezeup(x, start_ordinalday):
-    #     """Return doy of first instance"""
-    #     (vals,) = np.where(x == True)
-    #     # get the first one only! for freezeup
-    #     if len(vals) > 0:
-    #         return vals.min() + start_ordinalday
-    #     else:
-    #         return np.nan  # -9999
-
     # Search 9/1 to 1/31 of following year
     daily_vals = ds_sic.sel(
         time=slice(f"{year}-09-01", f"{int(year) + 1}-01-31")
@@ -67,7 +58,6 @@ def freezeup_start(ds_sic, summer_mean, summer_std, year):
     arr = (daily_vals >= threshold).values
     # apply through time
     ordinal_days_freezeup_start = np.apply_along_axis(
-        # first_freezeup, axis=0, arr=arr, start_ordinalday=start_ordinalday
         get_doy,
         axis=0,
         arr=arr,
@@ -76,6 +66,7 @@ def freezeup_start(ds_sic, summer_mean, summer_std, year):
     ordinal_days_freezeup_start[mask] = np.nan
     # if the Aug-Sept mean/threshold is >25%, then that date is NAN. [from Mark/Hajo]
     ordinal_days_freezeup_start[smean > 0.25] = np.nan
+    
     return ordinal_days_freezeup_start
 
 
@@ -135,13 +126,6 @@ def freezeup_end(ds_sic, winter_mean, freezeup_start_arr, year, ncpus):
     threshold[threshold > 0.5] = 0.5
     arr = daily_vals.values > threshold
 
-    # find freezeup end date.
-    # ordinal_days_freezeup_end = np.zeros_like(arr[0, ...].astype(np.float32))
-    # for i, j in np.ndindex(arr.shape[-2:]):
-    #     ordinal_days_freezeup_end[i, j] = last_freezeup(
-    #         arr[:, i, j], freezeup_start_arr[i, j], start_ordinalday
-    #     )
-
     # this is for finding the first date for which the following two weeks are above
     #   the threshold
     freeze_bool_arr = np.array(
@@ -182,25 +166,13 @@ def breakup_start(ds_sic, winter_mean, winter_std, summer_mean, year):
     threshold.data[threshold.data < 0.15] = 0.15
     arr = (daily_vals > threshold).values
 
-    # def alltrue(x):
-    #     return x.all()  # skips np.nan
-
-    # def wherefirst(x, start_ordinalday):
-    #     (vals,) = np.where(x == True)
-    #     if len(vals) > 0:
-    #         return vals[~np.isnan(vals)].max() + start_ordinalday
-    #     else:
-    #         return np.nan  # -9999
-
     # find where the 2week groups are all sic are below the threshold to start breakup
     twoweek_groups_alltrue = [
         arr[(idx - 14) : idx, ...].all(axis=0) for idx in np.arange(times)[14:]
     ]
     # stack to a 3D array/grab a copy
     arr = np.array(twoweek_groups_alltrue).copy()
-    # ordinal_day_first_breakup_twoweeks
     ordinal_days_breakup_start = np.apply_along_axis(
-        # wherefirst, arr=arr, axis=0, start_ordinalday=start_ordinalday
         get_doy,
         arr=arr,
         axis=0,
@@ -216,27 +188,13 @@ def breakup_start(ds_sic, winter_mean, winter_std, summer_mean, year):
     ordinal_days_breakup_start[
         ordinal_days_breakup_start + 1 == end_ordinalday
     ] = np.nan
-    # ordinal_days_breakup_start[ ordinal_days_breakup_start == end_ordinalday ] = np.nan
+
     return ordinal_days_breakup_start
 
 
 def breakup_end(ds_sic, summer_mean, summer_std, breakup_start_arr, year, ncpus):
     """Compute the breakup ending date for a given year"""
-    # % find the last day where conc exceeds summer value plus 1std
-    # set a minimum threshold of 50%
-
-    # def last_breakup(x, start_ordinalday):
-    #     """Find the last instance in time where sic exceeds threshold"""
-    #     (vals,) = np.where(x == True)
-    #     # add a 1 to the index since it is zero based and we are using it as a way to increment days
-    #     if vals.shape[0] > 0:
-    #         return vals.max() + start_ordinalday  # add ordinal start day to the index
-    #     else:
-    #         return np.nan  # -9999
-
     daily_vals = ds_sic.sel(time=slice(f"{year}-02-01", f"{year}-09-30")).copy()
-    #         deep=True
-    #     )
     start_ordinalday = int(daily_vals.time.to_index().min().strftime("%j"))
     # handle potential case of end_year not included in input series
     end_ordinalday = int(pd.to_datetime(f"{year}-09-30").strftime("%j"))
@@ -246,12 +204,9 @@ def breakup_end(ds_sic, summer_mean, summer_std, breakup_start_arr, year, ncpus)
     summer = summer_mean.sel(year=int(year)).copy()
     mean_plus_std = summer + summer_std.copy().sel(year=int(year))
     threshold = mean_plus_std.data.copy()
-    # threshold[threshold < 0.15] = 0.15
-    # need different threshold, too conservative
+    # using a higher minimum threshold, 15% was too conservative
     threshold[threshold < 0.5] = 0.5
-    # arr = (daily_vals > threshold).values
     arr = (daily_vals < threshold).values
-    # find
     # for determining if the following two weeks are BELOW the threshold
     # testing definition of indicator being the first day where the following two
     #   weeks are below the threshold
@@ -269,28 +224,9 @@ def breakup_end(ds_sic, summer_mean, summer_std, breakup_start_arr, year, ncpus)
 
     ordinal_days_breakup_end = np.array(bu_end).reshape(dims).astype(np.float32)
     ordinal_days_breakup_end[mask] = np.nan
-
-    # # stack to a 3D array/grab a copy
-    # arr = np.array(twoweek_groups_alltrue).copy()
-
-    # ordinal_days_breakup_end = np.apply_along_axis(
-    #     # last_breakup, axis=0, arr=arr, start_ordinalday=start_ordinalday
-    #     get_doy,
-    #     axis=0,
-    #     arr=arr,
-    #     start_ordinalday=start_ordinalday,
-    #     # first=False
-    # ).astype(np.float32)
-    # # if the summer mean is greater than 25% make it NA
-    # # ordinal_days_breakup_end[summer.values > 0.25] = np.nan
-    # # if all two week periods are below threshold make it NA
-    # ordinal_days_breakup_end[arr.all(axis=0)] = np.nan
-
     # if it is the last day of the time-window, (sept. 30th) make it NA
     ordinal_days_breakup_end[ordinal_days_breakup_end >= end_ordinalday] = np.nan
     ordinal_days_breakup_end[ordinal_days_breakup_end < start_ordinalday] = np.nan
-    # require breakup_start be defined
-    # ordinal_days_breakup_end[np.isnan(breakup_start_arr)] = np.nan
     # mask it
     ordinal_days_breakup_end[mask] = np.nan
 
@@ -298,10 +234,7 @@ def breakup_end(ds_sic, summer_mean, summer_std, breakup_start_arr, year, ncpus)
 
 
 def wrap_fubu(year, ds_sic, summer_mean, summer_std, winter_mean, winter_std, ncpus):
-    """
-    wrapper function to run an entire year in one process
-    * this is mainly used as a wrapper function for multiprocessing.
-    """
+    """Compute the freeze-up/break-up start/end dates for a single year"""
     freezeup_start_arr = freezeup_start(ds_sic, summer_mean, summer_std, year)
     freezeup_end_arr = freezeup_end(
         ds_sic, winter_mean, freezeup_start_arr, year, ncpus
@@ -313,75 +246,85 @@ def wrap_fubu(year, ds_sic, summer_mean, summer_std, winter_mean, winter_std, nc
         ds_sic, summer_mean, summer_std, breakup_start_arr, year, ncpus
     )
 
-    # Require that both metrics be defined, otherwise neither
+    # Require that both start/end metrics be defined, otherwise neither
     freezeup_start_arr[np.isnan(freezeup_end_arr)] = np.nan
     freezeup_end_arr[np.isnan(freezeup_start_arr)] = np.nan
     breakup_start_arr[np.isnan(breakup_end_arr)] = np.nan
     breakup_end_arr[np.isnan(breakup_start_arr)] = np.nan
-
-    print(f"{year} complete.")
-    return {
+    
+    year_di = {
         "freezeup_start": freezeup_start_arr,
         "freezeup_end": freezeup_end_arr,
         "breakup_start": breakup_start_arr,
         "breakup_end": breakup_end_arr,
     }
+    
+    # Set nodata value to -9999 and convert to integer for writing
+    for indicator in year_di:
+        year_di[indicator][np.isnan(year_di[indicator])] = -9999
+        year_di[indicator] = year_di[indicator].astype(np.int32)
+
+    print(f"{year} complete.")
+    
+    return year_di
 
 
-def make_avg_ordinal(fubu, years, metric):
-    """
-    metrics = ['freezeup_start','freezeup_end','breakup_start','breakup_end']
-    [ NOTE ]: we are masking the -9999 values for these computations...  which will
-                most likely need to change for proper use.
-    """
-    # stack it
-    arr = np.array([fubu_years[year][metric] for year in years])
-    mask = np.isnan(arr[0]).copy()
-    # arr = np.ma.masked_where(arr == -9999, arr, copy=True)
-    arr = np.rint(np.ma.mean(arr, axis=0)).data
-    arr[mask] = np.nan
-    return arr.astype(np.float32)
-
-
-def make_xarray_dset_years(arr_dict, years, coords, transform):
-    """ make a NetCDF file output computed metrics for FU/BU in a 3-D variable-based way """
+def make_cf_dataset(arr_dict, years, coords):
+    """Make an xarray dataset from the FU/BU dates that is CF compliant"""
 
     xc, yc = (coords["xc"], coords["yc"])
-    attrs = {
-        "proj4string": "EPSG:3411",
-        "proj_name": "NSIDC North Pole Stereographic",
-        "affine_transform": transform,
+    
+    # global CF-conventions attributes to add when creating DataSet
+    global_attrs = {
+        "Conventions": "CF-1.8",
+        "title": "Arctic sea ice freeze-up and break-up dates derived from passive microwave satellite data, 1979-2018",
+        "institution": "Scenarios Network for Alaska and Arctic Planning, International Arctic Research Center, University of Alaska Fairbanks",
+        "source": "Data variables were derived from the NSIDC-0051 passive microwave data (https://doi.org/10.5067/8GQ8LZQVL0VL) using methods described in the 'comment' global attribute",
+        "comment": "This dataset was developed as an extension of the work presented in Johnson and Eicken (2016; see 'references' global attribute).\n",
+        "references": "Mark Johnson, Hajo Eicken; Estimating Arctic sea-ice freeze-up and break-up from the satellite record: A comparison of different approaches in the Chukchi and Beaufort Seas. Elementa: Science of the Anthropocene 1 January 2016; 4 000124. doi: https://doi.org/10.12952/journal.elementa.000124"
     }
-
+    with open("pipeline/indicators_criteria.txt", mode="r") as f:
+        global_attrs["comment"] += f.read()
+    
+    indicators = arr_dict.keys()
     ds = xr.Dataset(
         {
-            metric: (["year", "yc", "xc"], arr_dict[metric])
-            for metric in arr_dict.keys()
+            indicator: (["year", "yc", "xc"], arr_dict[indicator])
+            for indicator in indicators
         },
         coords={"xc": ("xc", xc), "yc": ("yc", yc), "year": years},
-        attrs=attrs,
+        attrs=global_attrs,
     )
-    return ds
-
-
-def make_xarray_dset_mean(arr_dict, coords, transform):
-    """ make a NetCDF file output computed metrics for FU/BU in a 3-D variable-based way """
-
-    xc, yc = (coords["xc"], coords["yc"])
-    attrs = {
-        "proj4string": "EPSG:3411",
-        "proj_name": "NSIDC North Pole Stereographic",
-        "affine_transform": transform,
-    }
-
-    ds = xr.Dataset(
-        {
-            metric: (["yc", "xc"], arr_dict[metric].squeeze())
-            for metric in arr_dict.keys()
-        },
-        coords={"xc": ("xc", xc), "yc": ("yc", yc)},
-        attrs=attrs,
-    )
+    
+    # add CRS metadata via grid mapping variable
+    grid_mapping_varname = "crs"
+    # the data type does not matter, it is just a dummy variable. 
+    ds[grid_mapping_varname] = xr.DataArray().astype(np.int32)
+    # add CF grid mapping attributes for EPSG 3411 using pyproj.crs.CRS.to_cf()
+    ds[grid_mapping_varname].attrs = CRS.from_epsg(3411).to_cf()
+    # this value is not provided by to_cf() method but is required in conventions
+    ds[grid_mapping_varname].attrs["latitude_of_projection_origin"] = 90.
+    # standad names and units for xc and yc according to CF-conventions
+    ds["xc"].attrs["standard_name"] = "projection_x_coordinate"
+    ds["yc"].attrs["standard_name"] = "projection_y_coordinate"
+    for coord_var in ["xc", "yc"]:
+        ds[coord_var].attrs["units"] = "m"
+        
+    # add attributes to indicator data variables
+    for indicator in indicators:
+        group, status = indicator.split("_")
+        indicator_attrs = {
+            "_FillValue": -9999,
+            "valid_range": [1, 428],
+            "grid_mapping": grid_mapping_varname,
+            "long_name": f"Day-of-year of {group[:-2].title()}-up {status}",
+            "comment": "Units are 'day-of-year'. No 'units' attribute is provided for this variable because UDUNITS does not have support for a 'day-of-year' unit.",
+        }
+    
+    # add info about year discrete axis coordinate
+    ds["year"].attrs["long_name"] = "year of indicator observation"
+    ds["year"].attrs["comment"] = "Year is given as a discrete axis instead of a time coordinate variable to aid useability. This variable provides the ineger value of the year (standard calendar) in which each indicator was defined in a way that is more straightfoward than representing the year of observation as the 'days since <timestamp>' format with bounds."
+        
     return ds
 
 
@@ -427,16 +370,16 @@ if __name__ == "__main__":
     ncpus = args.ncpus
 
     base_dir = Path(os.getenv("BASE_DIR"))
+    out_dir = Path(os.getenv("OUTPUT_DIR"))
     sic_fp = base_dir.joinpath(
         "nsidc_0051/smoothed/nsidc_0051_sic_1978-2019_smoothed.nc"
     )
 
     np.warnings.filterwarnings("ignore")  # filter annoying warnings.
 
-    # # open the NetCDF that we made...
-    ds = xr.load_dataset(
-        sic_fp
-    )  # load it so it processes a LOT faster plus it is small...
+    # Open dataset of smoothed daily SIC
+    # load it so it processes a LOT faster plus it is small...
+    ds = xr.load_dataset(sic_fp)  
 
     # slice the data to the full years... currently this is 1979-20**
     ds_sic = ds.sel(time=slice(begin, end))["sic"]
@@ -469,12 +412,6 @@ if __name__ == "__main__":
         winter_std=winter_std,
         ncpus=ncpus,
     )
-    # [FIX ME] run parallel (notworking due to an issue that I think is solved in Py3.7.*)
-    # with mp.Pool as
-    # pool = mp.Pool( ncpus )
-    # fubu_years = dict(zip(years, pool.map(f, years)))
-    # pool.close()
-    # pool.join()
 
     # run serial
     fubu_years = {year: f(year) for year in years}
@@ -482,50 +419,17 @@ if __name__ == "__main__":
     # # make NC file with metric outputs as variables and years as the time dimension
     # # --------- --------- --------- --------- --------- --------- --------- ---------
     # stack into arrays by metric
-    transform = ds.affine_transform
-    metrics = ["freezeup_start", "freezeup_end", "breakup_start", "breakup_end"]
+    
     stacked = {
-        metric: np.array([fubu_years[year][metric] for year in years])
-        for metric in metrics
+        indicator: np.array([fubu_years[year][indicator] for year in years])
+        for indicator in fubu_years[list(fubu_years.keys())[0]].keys()
     }
-    ds_fubu = make_xarray_dset_years(stacked, years, ds.coords, transform)
-    out_fp = base_dir.joinpath(f"nsidc_0051/outputs/nsidc_0051_{begin}-{end}_fubu.nc")
+    fubu = make_cf_dataset(stacked, years, ds.coords)
+    out_fp = out_dir.joinpath(f"arctic_seaice_fubu_dates_{begin}-{end}.nc")
     out_fp.parent.mkdir(exist_ok=True)
 
-    # out_fn = os.path.join(
-    #     base_path,
-    #     "outputs",
-    #     "NetCDF",
-    #     "nsidc_0051_sic_nasateam_{}-{}{}_north_smoothed_fubu_dates.nc".format(
-    #         str(begin), str(end), suffix
-    #     ),
-    # )
-
     # dump to disk
-    ds_fubu.to_netcdf(out_fp, format="NETCDF4")
-
-    # make averages in ordinal day across all fu/bu
-    metrics = ["freezeup_start", "freezeup_end", "breakup_start", "breakup_end"]
-    averages = {
-        metric: make_avg_ordinal(fubu_years, years, metric) for metric in metrics
-    }
-
-    # write the average dates (clim) to a NetCDF
-    ds_fubu_avg = make_xarray_dset_mean(averages, ds.coords, transform)
-
-    mean_out_fp = str(out_fp).replace("fubu.nc", "fubu_mean.nc")
-
-    # output_filename = os.path.join(
-    #     base_path,
-    #     "outputs",
-    #     "NetCDF",
-    #     "nsidc_0051_sic_nasateam_{}-{}{}_north_smoothed_fubu_dates_mean.nc".format(
-    #         begin, end, suffix
-    #     ),
-    # )
-    # make the output dir if needed:
-
-    ds_fubu_avg.to_netcdf(mean_out_fp, format="NETCDF4")
+    fubu.to_netcdf(out_fp)    
 
     print(f"program finished, duration: {round((time.perf_counter() - tic) / 60, 1)}m")
 
