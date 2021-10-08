@@ -2,4 +2,6 @@
 .ipynb_checkpoints
 set_vars
 ._*
+envs/
+__pycache__
 scratch.ipynb

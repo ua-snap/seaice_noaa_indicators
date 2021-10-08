@@ -1,26 +1,21 @@
-"""Download data sets from NSIDC
+"""Download data sets 0051 and 0747 from NSIDC
 
 Usage:
-    pipenv run python download.py [-c]
-    Script #1 of data pipeline
-
-Returns:
-    NSIDC-0051 daily data files written to $BASE_DIR/nsidc_0051/raw/daily
-    NSIDC-0747 data file written $BASE_DIR/nsidc_0747 
+    Functions for step #1 of the main data pipeline and for use in 
+    manuscript content creation. Use to download NSIDC-0051 and NSIDC-0747
+    data sets from NSIDC.
 
 Notes:
-    The script will first search Earthdata for all matching files.
+    The functions will first search Earthdata for all matching files.
     The user needs to store Earthdata credentials in $HOME/.netrc
     The .netrc file should have the following format:
     machine urs.earthdata.nasa.gov login myusername password mypassword
 
-    This script was adapted from the nsidc-download script.
+    These functions were adapted from the NSIDC-provided download script.
     It was originally tested to work with Python 2 as well
-    which is why it is longer than needed, plan to re-implement in
-    python 3 exclusively if time allows.
+    which is why it is probably longer than needed.
 """
 
-import argparse
 import base64
 import itertools
 import json
@@ -33,21 +28,6 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen, Request, build_opener, HTTPCookieProcessor
-
-version = "1"
-time_start = "1978-10-26T00:00:00Z"
-time_end = "2019-12-31T23:59:59Z"
-polygon = ""
-filename_filter = "*"
-
-CMR_URL = "https://cmr.earthdata.nasa.gov"
-URS_URL = "https://urs.earthdata.nasa.gov"
-CMR_PAGE_SIZE = 2000
-CMR_FILE_URL = (
-    "{0}/search/granules.json?provider=NSIDC_ECS"
-    "&sort_key[]=start_date&sort_key[]=producer_granule_id"
-    "&scroll=true&page_size={1}".format(CMR_URL, CMR_PAGE_SIZE)
-)
 
 
 def get_username():
@@ -82,12 +62,12 @@ def get_credentials(url):
     credentials = None
     try:
         info = netrc.netrc()
-        username, account, password = info.authenticators(urlparse(URS_URL).hostname)
+        username, account, password = info.authenticators(urlparse(urs_url).hostname)
 
     except Exception:
         try:
             username, account, password = info.authenticators(
-                urlparse(CMR_URL).hostname
+                urlparse(cmr_url).hostname
             )
         except Exception:
             username = None
@@ -143,7 +123,7 @@ def build_cmr_query_url(
         params += "&producer_granule_id[]={0}&options[producer_granule_id][pattern]=true".format(
             filename_filter
         )
-    return CMR_FILE_URL + params
+    return cmr_file_url + params
 
 
 def cmr_download(urls, out_dir):
@@ -154,7 +134,8 @@ def cmr_download(urls, out_dir):
     url_count = len(urls)
     print("Downloading {0} files...".format(url_count))
     credentials = None
-
+    
+    out_di = {}
     for index, url in enumerate(urls, start=1):
         if not credentials and urlparse(url).scheme == "https":
             credentials = get_credentials(url)
@@ -177,16 +158,19 @@ def cmr_download(urls, out_dir):
             opener = build_opener(HTTPCookieProcessor())
             data = opener.open(req).read()
             open(fp, "wb").write(data)
+            out_di[url] = fp
         except HTTPError as e:
             print("HTTP error {0}, {1}".format(e.code, e.reason))
+            out_di[url] = e.reason
         except URLError as e:
             print("URL error: {0}".format(e.reason))
+            out_di[url] = e.reason
         except IOError:
             raise
         except KeyboardInterrupt:
             quit()
 
-    return fp
+    return out_di
 
 
 def cmr_filter_urls(search_results):
@@ -268,77 +252,14 @@ def cmr_search(
             url_scroll_results = cmr_filter_urls(search_page)
             if not url_scroll_results:
                 break
-            if hits > CMR_PAGE_SIZE:
+            if hits > cmr_page_size:
                 print(".", end="")
                 sys.stdout.flush()
             urls += url_scroll_results
 
-        if hits > CMR_PAGE_SIZE:
+        if hits > cmr_page_size:
             print()
         return urls
     except KeyboardInterrupt:
         quit()
     
-
-    
-if __name__ == "__main__":
-    # download NSIDC-0051 first, NSIDC-0747 second
-    # check what is already present locally before downloading
-    
-    # Supply some default search parameters, just for testing purposes.
-    # These are only used if the parameters aren't filled in up above.
-    global version, time_start, time_end, polygon, filename_filter
-
-    parser = argparse.ArgumentParser(description="Download NSIDC data")
-    parser.add_argument(
-        "-c",
-        "--clobber",
-        action="store_true",
-        dest="clobber",
-        default=False,
-        help=("Flag to download all data, overwriting any local data"),
-    )
-    
-    # unpack args
-    args = parser.parse_args()
-    clobber = args.clobber
-    
-    base_dir = Path(os.getenv("BASE_DIR"))
-    out_0051_dir = base_dir.joinpath("nsidc_0051/raw/daily")
-    out_0051_dir.mkdir(exist_ok=True, parents=True)
-    
-    urls = cmr_search(
-        "NSIDC-0051",
-        version,
-        time_start,
-        time_end,
-        polygon=polygon,
-        filename_filter=filename_filter,
-    )
-    
-    # dunno what these new files are yet, but remove them
-    urls = [url for url in urls if "s.bin" not in Path(url).name]
-    # also filter out monthly data urls
-    urls = [url for url in urls if len(Path(url).name.split("_")[1]) == 8]  
-
-    if not clobber:
-        # filter out already downloaded files
-        local_fps = [fp.name for fp in list(out_0051_dir.glob("*"))]
-        urls = [url for url in urls if Path(url).name not in local_fps]
-
-    _ = cmr_download(urls, out_0051_dir)
-    print(f"NSIDC-0051 data written to {out_0051_dir}")
-
-    # next, download NSIDC-0747
-    out_0747_dir = base_dir.joinpath("nsidc_0747")
-    out_0747_dir.mkdir(exist_ok=True)
-    url = "https://daacdata.apps.nsidc.org/pub/DATASETS/nsidc0747_seaice_melt_indicators_v1/arctic_seaice_climate_indicators_nh_v01r01_1979-2017.nc"
-    if not clobber:
-        if not out_0747_dir.joinpath(Path(url).name).exists():
-            out_0747_fp = cmr_download([url], out_0747_dir)
-            print(f"NSIDC-0747 written to {out_0747_fp}")
-        else:
-            print("NSIDC-0747 already preent in $BASE_DIR")
-    else:
-        out_0747_fp = cmr_download([url], out_0747_dir)
-        print(f"NSIDC-0747 written to {out_0747_fp}")

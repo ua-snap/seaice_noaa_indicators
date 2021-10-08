@@ -76,10 +76,17 @@ def get_landmask(orac_fp):
 
 def save_fig(fp):
     """Helper function to save matplotlib figures"""
+    import time
+    import datetime as dt
     import matplotlib.pyplot as plt
     
     plt.savefig(fp, dpi=300, bbox_inches="tight", facecolor="white")
-    print(f"Plot written to {fp}")
+    print(
+        (f"Plot written to {fp} at "
+        f"{dt.datetime.utcfromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')}"), 
+        file=terminal_output, 
+        flush=True
+    )
     
     return
 
@@ -615,7 +622,7 @@ def make_violin_plots(zs_df, stat_name, palette, ylab, out_fp):
 
     g.fig.set_size_inches(10, 10)
 
-    #save_fig(out_fp)
+    save_fig(out_fp)
     
     return
 
@@ -755,7 +762,7 @@ def make_masie_mean_histograms(fubu, orac, masie_polys, affine, out_fp):
     handles, labels = axs[0,0].get_legend_handles_labels()
     fig.legend(handles, ["J&E", "Bliss"], loc="right", fontsize=14)
 
-    # save_fig(out_fp)
+    save_fig(out_fp)
 
     plt.show()
     
@@ -1085,7 +1092,7 @@ def make_poi_maps(poi_coords, world_shore, seamask_src, out_fp):
     axbig.legend(handles=[land_patch, pixel_line], loc="center", fontsize=14)
 
     plt.tight_layout()
-    #save_fig(out_fp)
+    save_fig(out_fp)
 
     plt.show()
 

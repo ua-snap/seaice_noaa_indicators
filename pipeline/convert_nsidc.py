@@ -1,25 +1,14 @@
 """Convert the raw NSIDC-0051 data from flat binary to GeoTIFFs
 
 Usage:
-    pipenv run python convert.py -n <number of CPUs> [-c]
-    Script #2 of data pipeline
-
-Returns:
-    NSIDC-0051 daily data files in $BASE_DIR/nsidc_0051/raw/daily
-    converted from binary to GeoTIFF, written to 
-    $BASE_DIR/nsidc_0051/prepped
+    Functions for step #2 of data pipeline, which creates GeoTIFFs
+    of raw NSIDC-0051 data.
 """
 
-import getpass
-import argparse
 import os
-import shutil
 import subprocess
-import multiprocessing as mp
 import numpy as np
 import rasterio as rio
-from pathlib import Path
-from functools import partial
 
 
 def rescale_values(fp, band=1):
@@ -95,48 +84,3 @@ def convert_bin_to_gtiff(fp, out_dir):
     _ = rescale_values(out_fp, band=1)
 
     return out_fp
-
-
-if __name__ == "__main__":
-    # parse some args
-    parser = argparse.ArgumentParser(description="Convert raw NSIDC-0051 Dailies")
-    parser.add_argument(
-        "-c",
-        "--clobber",
-        action="store_true",
-        dest="clobber",
-        default=False,
-        help="Convert all available files without checking for existing converted files",
-    )
-    parser.add_argument(
-        "-n",
-        "--ncpus",
-        action="store",
-        dest="ncpus",
-        type=int,
-        help="number of cpus to use",
-    )
-
-    # unpack the args
-    args = parser.parse_args()
-    clobber = args.clobber
-    ncpus = args.ncpus
-   
-    base_dir = Path(os.getenv("BASE_DIR"))
-    in_dir = base_dir.joinpath("nsidc_0051/raw/daily")
-    # make output dir if not present
-    out_dir = base_dir.joinpath("nsidc_0051/prepped")
-    out_dir.mkdir(exist_ok=True, parents=True)
-    # list filepaths from input dir
-    fps = [fp for fp in in_dir.glob("*.bin")]
-
-    # if clobber not specifed, check for existing files in out_dir
-    if not clobber:
-        converted_fns = [fp.name.replace("v1-1", "v1.1") for fp in out_dir.glob("*")]
-        fps = [fp for fp in fps if fp.name not in converted_fns]
-
-    args = [(fp, out_dir) for fp in fps]
-    pool = mp.Pool(ncpus)
-    out = pool.starmap(convert_bin_to_gtiff, args)
-    pool.close()
-    pool.join()

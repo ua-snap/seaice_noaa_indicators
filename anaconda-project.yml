@@ -1,0 +1,134 @@
+# This is an Anaconda project file.
+#
+# Here you can describe your project and how to run it.
+# Use `anaconda-project run` to run the project.
+# The file is in YAML format, please see http://www.yaml.org/start.html for more.
+#
+
+#
+# Set the 'name' key to name your project
+#
+name: seaice_noaa_indicators
+
+#
+# Set a one-sentence-or-so 'description' key with project details
+#
+description: This project estimates Freeze-up/Break-up dates from NSIDC-0051 Version
+  001 Daily Time Series Data.
+
+#
+# In the commands section, list your runnable scripts, notebooks, and other code.
+# Use `anaconda-project add-command` to add commands.
+#
+commands:
+  default:
+    unix: |
+      printf "\nExecuting the seaice_noaa_indicators pipeline\n\n" 
+      jupyter nbconvert pipeline/pipeline.ipynb --to html --output-dir $OUTPUT_DIR --no-prompt --no-input --execute
+      printf "\nExecuting the points-of-interest notebook\n\n"
+      jupyter nbconvert manuscript_content/points_of_interest.ipynb --to html --output-dir $OUTPUT_DIR --no-prompt --no-input --execute
+      printf "\nExecuting the manuscript content notebook\n\n"
+      jupyter nbconvert manuscript_content/manuscript_content.ipynb --to html --output-dir $OUTPUT_DIR --no-prompt --no-input --execute
+    description: Run all parts of the pipeline (the main pipeline, manuscript content).
+    env_spec: default
+  pipeline:
+    unix: jupyter nbconvert pipeline/pipeline.ipynb --to html --output-dir $OUTPUT_DIR
+      --no-prompt --no-input --execute
+    description: Execute the pipeline jupyter notebook.
+    env_spec: default
+  poi:
+    unix: jupyter nbconvert manuscript_content/points_of_interest.ipynb --to html
+      --output-dir $OUTPUT_DIR --no-prompt --no-input --execute
+    description: Execute the points-of-interest jupyter notebook.
+    env_spec: default
+  manuscript:
+    unix: jupyter nbconvert manuscript_content/manuscript_content.ipynb --to html
+      --output-dir $OUTPUT_DIR --no-prompt --no-input --execute
+    description: Execute the manuscript content jupyter notebook.
+    env_spec: default
+
+#
+# In the variables section, list any environment variables your code depends on.
+# Use `anaconda-project add-variable` to add variables.
+#
+variables:
+- BASE_DIR
+- OUTPUT_DIR
+- SCRATCH_DIR
+
+#
+# In the services section, list any services that should be
+# available before your code runs.
+# Use `anaconda-project add-service` to add services.
+#
+services: {}
+
+#
+# In the downloads section, list any URLs to download to local files
+# before your code runs.
+# Use `anaconda-project add-download` to add downloads.
+#
+downloads: {}
+
+#
+# In the packages section, list any packages that must be installed
+# before your code runs.
+# Use `anaconda-project add-packages` to add packages.
+#
+packages:
+- python=3.7
+- pip:
+  - affine
+  - dask
+  - geopandas
+  - h5py
+  - ipython
+  - matplotlib
+  - netCDF4
+  - numpy
+  - pandas
+  - pyproj
+  - rasterio
+  - requests
+  - Rtree
+  - scipy
+  - seaborn
+  - Shapely
+  - toolz
+  - xarray
+  - pyzmq<20
+  - rioxarray
+  - rasterstats
+  - numba
+- jupyterlab
+- xlrd
+- openpyxl
+channels:
+- conda-forge
+
+#
+# In the platforms section, list platforms the project should work on
+# Examples: "linux-64", "osx-64", "win-64"
+# Use `anaconda-project add-platforms` to add platforms.
+#
+platforms:
+- linux-64
+- osx-64
+- win-64
+
+#
+# You can define multiple, named environment specs.
+# Each inherits any global packages or channels,
+# but can have its own unique ones also.
+# Use `anaconda-project add-env-spec` to add environment specs.
+#
+env_specs:
+  default:
+    packages:
+    - notebook
+    channels: []
+
+# This is a temporary fix to remove warnings 
+# about notebooks without commands
+skip_imports:
+  notebooks: true

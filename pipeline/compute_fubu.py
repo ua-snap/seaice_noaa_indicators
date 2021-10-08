@@ -1,22 +1,16 @@
-"""compute Freeze-Up / Break-Up dates from NSIDC-0051 Daily Sea Ice Concentrations
+"""Compute Freeze-Up / Break-Up indicators from smoothed NSIDC-0051 
+daily sea ice concentrations
 
 Usage:
-    pipenv run python compute_fubu.py -n <number of CPUs> [-b] [-e]
-    Script #4 of data pipeline
-
-Returns:
-    CF-compliant FUBU dates dataset written to $OUTPUT_DIR/arctic_seaice_fubu_dates_<begin(YYYY)>-<end(YYYY)>.nc
+    Functions for step #4 of main data pipeline, which creates a 
+    CF-compliant FUBU indicators dataset
 """
 
-import argparse
 import os
-import time
 import numpy as np
 import pandas as pd
 import xarray as xr
-from functools import partial
 from multiprocessing import Pool
-from pathlib import Path
 from pyproj.crs import CRS
 
 
@@ -264,7 +258,7 @@ def wrap_fubu(year, ds_sic, summer_mean, summer_std, winter_mean, winter_std, nc
         year_di[indicator][np.isnan(year_di[indicator])] = -9999
         year_di[indicator] = year_di[indicator].astype(np.int32)
 
-    print(f"{year} complete.")
+    print(f"{year} complete.", end=" ")
     
     return year_di
 
@@ -272,7 +266,7 @@ def wrap_fubu(year, ds_sic, summer_mean, summer_std, winter_mean, winter_std, nc
 def make_cf_dataset(arr_dict, years, coords):
     """Make an xarray dataset from the FU/BU dates that is CF compliant"""
 
-    xc, yc = (coords["xc"], coords["yc"])
+    xc, yc = (coords["xc"].data, coords["yc"].data)
     
     # global CF-conventions attributes to add when creating DataSet
     global_attrs = {
@@ -283,7 +277,7 @@ def make_cf_dataset(arr_dict, years, coords):
         "comment": "This dataset was developed as an extension of the work presented in Johnson and Eicken (2016; see 'references' global attribute).\n",
         "references": "Mark Johnson, Hajo Eicken; Estimating Arctic sea-ice freeze-up and break-up from the satellite record: A comparison of different approaches in the Chukchi and Beaufort Seas. Elementa: Science of the Anthropocene 1 January 2016; 4 000124. doi: https://doi.org/10.12952/journal.elementa.000124"
     }
-    with open("pipeline/indicators_criteria.txt", mode="r") as f:
+    with open("indicators_criteria.txt", mode="r") as f:
         global_attrs["comment"] += f.read()
     
     indicators = arr_dict.keys()
@@ -326,118 +320,3 @@ def make_cf_dataset(arr_dict, years, coords):
     ds["year"].attrs["comment"] = "Year is given as a discrete axis instead of a time coordinate variable to aid useability. This variable provides the ineger value of the year (standard calendar) in which each indicator was defined in a way that is more straightfoward than representing the year of observation as the 'days since <timestamp>' format with bounds."
         
     return ds
-
-
-if __name__ == "__main__":
-    print("program start")
-    tic = time.perf_counter()
-
-    # parse some args
-    parser = argparse.ArgumentParser(
-        description="compute freezeup/breakup dates from NSIDC-0051 prepped dailies"
-    )
-    parser.add_argument(
-        "-b",
-        "--begin",
-        action="store",
-        dest="begin",
-        type=str,
-        default="1979",
-        help="beginning year of the climatology",
-    )
-    parser.add_argument(
-        "-e",
-        "--end",
-        action="store",
-        dest="end",
-        type=str,
-        default="2019",
-        help="ending year of the climatology",
-    )
-    parser.add_argument(
-        "-n",
-        "--ncpus",
-        action="store",
-        dest="ncpus",
-        type=int,
-        help="number of cpus to use",
-    )
-
-    # unpack the args here...  It is just cleaner to do it this way...
-    args = parser.parse_args()
-    begin = args.begin
-    end = args.end
-    ncpus = args.ncpus
-
-    base_dir = Path(os.getenv("BASE_DIR"))
-    out_dir = Path(os.getenv("OUTPUT_DIR"))
-    sic_fp = base_dir.joinpath(
-        "nsidc_0051/smoothed/nsidc_0051_sic_1978-2019_smoothed.nc"
-    )
-
-    np.warnings.filterwarnings("ignore")  # filter annoying warnings.
-
-    # Open dataset of smoothed daily SIC
-    # load it so it processes a LOT faster plus it is small...
-    ds = xr.load_dataset(sic_fp)  
-
-    # slice the data to the full years... currently this is 1979-20**
-    ds_sic = ds.sel(time=slice(begin, end))["sic"]
-    years = (
-        ds_sic.time.to_index().map(lambda x: x.year).unique().tolist()[:-1]
-    )  # cant compute last year
-
-    # set all nodata pixels to np.nan
-    ds_sic.data[ds_sic.data > 1] = np.nan
-
-    # make a no data mask
-    mask = np.isnan(ds_sic.isel(time=0).data)
-
-    # get the summer and winter seasons that were determined in table 1 in the paper
-    summer = ds_sic.sel(time=get_summer(ds_sic["time.month"]))
-    winter = ds_sic.sel(time=get_winter(ds_sic["time.month"]))
-
-    # get the means and standard deviations of these season aggregates
-    summer_mean = summer.groupby("time.year").mean(dim="time").round(4)
-    summer_std = summer.groupby("time.year").std(dim="time", ddof=1).round(4)
-    winter_mean = winter.groupby("time.year").mean(dim="time").round(4)
-    winter_std = winter.groupby("time.year").std(dim="time", ddof=1).round(4)
-
-    f = partial(
-        wrap_fubu,
-        ds_sic=ds_sic,
-        summer_mean=summer_mean,
-        summer_std=summer_std,
-        winter_mean=winter_mean,
-        winter_std=winter_std,
-        ncpus=ncpus,
-    )
-
-    # run serial
-    fubu_years = {year: f(year) for year in years}
-
-    # # make NC file with metric outputs as variables and years as the time dimension
-    # # --------- --------- --------- --------- --------- --------- --------- ---------
-    # stack into arrays by metric
-    
-    stacked = {
-        indicator: np.array([fubu_years[year][indicator] for year in years])
-        for indicator in fubu_years[list(fubu_years.keys())[0]].keys()
-    }
-    fubu = make_cf_dataset(stacked, years, ds.coords)
-    out_fp = out_dir.joinpath(f"arctic_seaice_fubu_dates_{begin}-{end}.nc")
-    out_fp.parent.mkdir(exist_ok=True)
-
-    # dump to disk
-    fubu.to_netcdf(out_fp)    
-
-    print(f"program finished, duration: {round((time.perf_counter() - tic) / 60, 1)}m")
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# SOME NOTES ABOUT TRANSLATING FROM MLAB :
-# ----------------------------------------
-# [ 1 ]: to make an ordinal date that matches the epoch used by matlab in python
-# ordinal_date = date.toordinal(date(1971,1,1)) + 366
-# if not the number will be 366 days off due to the epoch starting January 0, 0000 whereas in Py Jan 1, 0001.
-# [ 2 ]: when computing stdev it is important to set the ddof=1 which is the matlab default.  Python leaves it at 0 default.
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #

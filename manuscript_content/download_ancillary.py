@@ -27,22 +27,3 @@ def run_download(url, out_fp):
             shutil.copyfileobj(r, f)
         
     return
-
-
-# if __name__ == "__main__":
-#     base_dir = Path(os.getenv("BASE_DIR"))
-#     out_dir = base_dir.joinpath("ancillary")
-#     out_dir.mkdir(parents=True, exist_ok=True)
-
-#     # download MASIE region vertices
-#     masie_url = "ftp://sidads.colorado.edu/DATASETS/NOAA/G02186/ancillary/MASIE_regions_polygon_vertices.xls"
-#     masie_fp = out_dir.joinpath(masie_url.split("/")[-1])
-#     run_download(masie_url, masie_fp)
-#     print(f"MASIE Region vertices saved to {masie_fp}")
-    
-#     # download world shoreline polygons
-#     shore_url = "https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip"
-#     shore_fp = out_dir.joinpath(shore_url.split("/")[-1])
-#     run_download(shore_url, shore_fp)
-
-#     print(f"World shoreline  saved to {shore_fp}")

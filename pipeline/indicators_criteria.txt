@@ -1,4 +1,4 @@
-
+S
 The indicators variables in this dataset we defined as follows:
 
 Freeze-up Start
@@ -12,7 +12,7 @@ Freeze-up Start
 
 Freeze-up End
     Valid date range: 9/1 - 2/28
-    Threshold: mean SIC in winter minus 10%, with a minimum of 15% and a maximum or 50%
+    Threshold: mean SIC in winter minus 10%, with a minimum of 15% and a maximum of 50%
     Definition: day-of-year of the first day after the Freeze-up Start date where the daily SIC exceeds the threshold for the following two weeks
     Undefined if: 
         a. daily SIC is above this threshold for every day of the search period

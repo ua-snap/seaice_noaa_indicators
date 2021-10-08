@@ -1,19 +1,14 @@
-"""Make a full array of daily sea ice concentration values
+"""Smooth daily SIC data
 
 Usage:
-    pipenv run python make_daily_timeseries.py -n <number of CPUs>
-    Script #3 of data pipeline
-
-Returns:
-    Smoothed daily NSIDC-0051 data written to 
-    $BASE_PATH/nsidc_0051/smoothed/
+    Functions for step #3 of main data pipeline, used for 
+    smoothing the daily NSIDC-0051 data.
 
 Notes:
     Interpolates missing dates linearly
     (2D spatial / 1D profile hann smoothed)
 """
 
-import argparse
 import os
 import math
 import numba
@@ -24,8 +19,6 @@ import pandas as pd
 import rasterio as rio
 import xarray as xr
 from affine import Affine
-from functools import partial
-from pathlib import Path
 from pyproj import Proj, transform
 from numba import cfunc, carray
 from numba.types import intc, CPointer, float64, intp, voidptr
@@ -259,150 +252,7 @@ def stack_rasters(files, ncpus=32):
     return arr
 
 
-# # # MULTIPROCESSING APPROACHES TO GENERIC FILTER BUT DONT WORK DUE TO SOME OpenBLAS ISSUE.
-# def spatial_smooth( arr, footprint, ncpus=32 ):
-#     arr_list = [a.copy() for a in arr] # unpack 3d (time,rows,cols) array to 2d list
-#     f = partial( mean_filter_2D, footprint=footprint )
-#     pool = mp.Pool( ncpus )
-#     out_arr = pool.map( f, arr_list )
-#     pool.close()
-#     pool.join()
-#     return np.array(out_arr)
-
-# def spatial_smooth( arr, size=3, ncpus=32 ):
-#     f = partial( mean_filter_2D, size=size )
-#     pool = mp.Pool( ncpus )
-#     out_arr = pool.map( f, [a for a in arr] )
-#     pool.close()
-#     pool.join()
-#     return np.array(out_arr)
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-
-if __name__ == "__main__":
-    # parse some args
-    parser = argparse.ArgumentParser(
-        description="stack the hourly outputs from raw WRF outputs to NetCDF files of hourlies broken up by year."
-    )
-    parser.add_argument(
-        "-n",
-        "--ncpus",
-        action="store",
-        dest="ncpus",
-        type=int,
-        help="number of cpus to use",
-    )
-
-    # unpack args
-    args = parser.parse_args()
-    ncpus = args.ncpus
-
-    # list all data
-    base_dir = Path(os.getenv("BASE_DIR"))
-
-    in_dir = base_dir.joinpath("nsidc_0051/prepped")
-    fps = sorted(list(in_dir.glob("*")))
-    data_times = [make_datetimes(fp.name.split(".")[0].split("_")[1]) for fp in fps]
-
-    # date-fu for filenames and slicing
-    begin = data_times[0]
-    end = data_times[-1]
-    begin_str = begin.strftime("%Y-%m-%d")
-    end_str = end.strftime("%Y-%m-%d")
-
-    # stack the irregularly spaced data to a netcdf
-    with rio.open(fps[0]) as template:
-        meta = template.meta.copy()
-        height, width = template.shape
-
-    arr = stack_rasters(fps, ncpus=ncpus)
-    ds = make_xarray_dset(arr.copy(), pd.DatetimeIndex(data_times), meta)
-    da = ds["sic"].copy()
-
-    # interpolate to daily
-    da_interp = da.resample(time="1D").asfreq()
-
-    # get a masks layer from the raw files.  These are all values > 250
-    # ------------ ------------ ------------ ------------ ------------ ------------ ------------
-    # 251 Circular mask used in the Arctic to cover the irregularly-shaped data
-    #       gap around the pole (caused by the orbit inclination and instrument swath)
-    # 252 Unused
-    # 253 Coastlines
-    # 254 Superimposed land mask
-    # 255 Missing data
-    # make a mask of the known nodata values when we start...
-    mask = (arr[0] > 250) & (arr[0] < 300)
-
-    # set masks to nodata
-    dat = da_interp.values.copy()
-
-    # make the nodata mask np.nan for computations
-    out_masked = []
-    for i in dat:
-        i[mask] = np.nan
-        out_masked = out_masked + [i]
-
-    # put the cleaned up data back into the stacked NetCDF
-    da_interp.data = np.array(out_masked)
-    da_interp.data = np.apply_along_axis(interpolate, axis=0, arr=da_interp).round(4)
-
-    # spatially smooth the 2-D daily slices of data using a mean generic filter. (without any aggregation)
-    print("spatial smooth")
-    footprint_type = "queens"
-    footprint_lu = {
-        "rooks": np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]]),
-        "queens": np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]]),
-    }
-
-    footprint = footprint_lu[footprint_type]
-
-    # 'run using multiprocessing -- YMMV this is a tad flaky at times.'
-    # ^^ comment from original author, not sure where flakiness manifested
-    # previously but left this note anyway.
-
-    #   Some profiling revealed that paritioning the interpolated array
-    # and looping over it with 10 cores on Atlas was about optimal.
-    filter_ncpus = 10
-    filter_slices = chunkit(da_interp.values.shape[0], filter_ncpus)
-    args = [(da_interp.values[sl], footprint) for sl in filter_slices]
-    with mp.Pool(filter_ncpus) as pool:
-        out = pool.starmap(run_jit_mean_filter, args)
-
-    def _maskit(x, mask):
-        """masking function"""
-        x[mask == True] = -9999
-        return x
-
-    # mask the spatial smoothed outputs with the mask at each 2D slice.
-    smoothed = np.array([_maskit(i, mask) for i in np.concatenate(out)]).copy()
-
-    print("hanning smooth")
-    n = 3  # perform 3 iterative smooths on the same series
-    for i in range(n):
-        smoothed = np.apply_along_axis(hanning_smooth, arr=smoothed, axis=0)
-
-    # make sure no values < 0, set to 0
-    smoothed[np.where((smoothed < 0) & (~np.isnan(smoothed)))] = 0
-
-    # make sure no values > 1, set to 1
-    smoothed[np.where((smoothed > 1) & (~np.isnan(smoothed)))] = 1
-
-    # mask it again to make sure the nodata and land are properly masked following hanning.
-    smoothed = np.array([_maskit(i, mask) for i in smoothed]).copy()
-
-    # write it out as a NetCDF
-    out_ds = da_interp.copy(deep=True)
-    out_ds.values = smoothed.astype(np.float32)
-    out_ds = out_ds.to_dataset(name="sic")
-    out_ds.attrs = ds.attrs
-
-    # output encoding
-    encoding = out_ds.sic.encoding.copy()
-    encoding.update({"zlib": True, "comp": 5, "contiguous": False, "dtype": "float32"})
-    out_ds.sic.encoding = encoding
-
-    out_fp = in_dir.parent.joinpath(
-        f"smoothed/nsidc_0051_sic_{str(begin.year)}-{str(end.year)}_smoothed.nc"
-    )
-    out_fp.parent.mkdir(exist_ok=True, parents=True)
-    out_ds.to_netcdf(out_fp, format="NETCDF4")
+def _maskit(x, mask):
+    """masking function"""
+    x[mask == True] = -9999
+    return x
