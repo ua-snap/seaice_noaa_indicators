@@ -1,5 +1,5 @@
 affine==2.1.0
-dask==0.16.0
+dask==2021.10.0
 Fiona==1.7.9.post1
 geopandas==0.3.0
 h5py==2.8.0
