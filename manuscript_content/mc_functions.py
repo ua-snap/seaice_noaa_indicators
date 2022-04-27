@@ -779,13 +779,13 @@ def load_poi_coords(poi_coords_fp):
     return poi_coords
 
 
-def load_seamask(seamask_fp):
+def open_rasterio(fp):
     """open the seamask GeoTIFF created in points_of_interest.ipynb"""
     import rasterio as rio
     
-    seamask_src = rio.open(seamask_fp)
+    src = rio.open(fp)
     
-    return seamask_src
+    return src
 
 
 def load_world_shore(gshhs_fp):
@@ -798,7 +798,7 @@ def load_world_shore(gshhs_fp):
     return world_shore
 
 
-def make_poi_kwargs(poi_coords, seamask_src, world_shore):
+def make_poi_kwargs(poi_coords, seamask_src, fast_ice_gdf, world_shore):
     """Make the kwargs for working with Points-of-interest"""
     poi_kwargs = {}
 
@@ -811,70 +811,71 @@ def make_poi_kwargs(poi_coords, seamask_src, world_shore):
             ],
             "scale": 2,
             "seamask_src": seamask_src,
+            "fast_ice_gdf": fast_ice_gdf,
             "world_shore": world_shore,
         }
 
     # add aditional info as dicts for plotting
     poi_kwargs["Utqiaġvik"]["map_di"] = {
         "poi_wgs84":(71.2906, -156.7886),
-        "poi_name_adj": (-1.25, 0.25),
-        "text": ["Chukchi Sea", "Beaufort Sea"],
-        "text_adj": [(0.6, 1), (0.5, -1.1)]
+        "poi_name_adj": (-1.2, -0.4),
+        "text": ["Chukchi\nSea", "Beaufort\nSea"],
+        "text_adj": [(-1.6, 1), (0.7, 1)]
     }
     poi_kwargs["South Chukchi Sea"]["map_di"] = {
         "poi_wgs84": (68.3478, -166.8081),
         "poi_name_adj": "none",
         "text": ["Bering\nStrait", "Chukchi Sea"],
-        "text_adj": [(-1.75, 1), (0.5, 0.6)]
+        "text_adj": [(-1.2, -2), (-1.5, 0.8)]
     }
     poi_kwargs["St. Lawrence Island"]["map_di"] = {
         "poi_wgs84": (62.9, -169.6),
-        "poi_name_adj": (-0.5, -0.8),
-        "text": ["Bering Sea"],
-        "text_adj": [(0, 1.25)]
+        "poi_name_adj": "none",
+        "text": ["Bering Sea", "St. Lawrence\nIsland", "Bering\nStrait"],
+        "text_adj": [(-1, -1.25), (0.25, 0.65), (-0.5, 1.4)]
     }
     poi_kwargs["Prudhoe Bay"]["map_di"] = {
         "poi_wgs84": (70.2, -148.2),
-        "poi_name_adj": (-1.2, 0.2),
+        "poi_name_adj": (-1.3, -0.5),
         "text": ["Beaufort Sea"],
-        "text_adj": [(0.5, -1.5)]
+        "text_adj": [(0.3, 1.5)]
     }
     poi_kwargs["Pevek"]["map_di"] = {
         "poi_wgs84": (69.8, 170.6),
-        "poi_name_adj": (-0.8, 0),
+        "poi_name_adj": (0.2, -0.2),
         "text": ["East Siberian Sea"],
-        "text_adj": [(0, -1.4)]
+        "text_adj": [(-0.75, 1.4)]
     }
     poi_kwargs["Tiksi"]["map_di"] = {
         "poi_wgs84": (71.6, 128.9),
-        "poi_name_adj": (0.2, 0),
+        "poi_name_adj": (-0.6, -0.5),
         "text": ["Laptev Sea"],
-        "text_adj": [(-1.75, -1.25)]
+        "text_adj": [(0.75, 1.25)]
     }
     poi_kwargs["Sabetta"]["map_di"] = {
         "poi_wgs84": (71.3, 72.1),
-        "poi_name_adj": (-0.3, -0.4),
+        "poi_name_adj": (-0.7, -0.5),
         "text": ["Kara Sea"],
-        "text_adj": [(-2.75, -2)]
+        "text_adj": [(-1.25, 2.75)]
     }
     poi_kwargs["Mestersvig"]["map_di"] = {
         "poi_wgs84": (72.2, -23.9),
-        "poi_name_adj": (-0.75, -0.4),
-        "text": ["Greenland Sea"],
-        "text_adj": [(0.65, 1)]
+        "poi_name_adj": (-1, -0.4),
+        "text": ["Greenland\nSea"],
+        "text_adj": [(1.1, 0.4)]
     }
     poi_kwargs["Clyde River"]["map_di"] = {
         "poi_wgs84": (70.3, -68.3),
-        "poi_name_adj": (-1.2, 0.25),
+        "poi_name_adj": (-1.4, -0.4),
         "text": ["Baffin Bay"],
-        "text_adj": [(0.8, 0.5)],
+        "text_adj": [(0.8, 0.75)],
     #     "text_bg": "#DFD8E1",
     }
     poi_kwargs["Churchill"]["map_di"] = {
         "poi_wgs84": (58.8, -94.2),
-        "poi_name_adj": (-1.2, 0),
+        "poi_name_adj": (-1.25, -0.4),
         "text": ["Hudson Bay"],
-        "text_adj": [(0.7, -0.7)]
+        "text_adj": [(0.6, 0.9)]
     }
     
     return poi_kwargs
@@ -902,19 +903,18 @@ def reproject_poi(poi, in_epsg=4326, out_epsg=3411):
 def clip_shore_to_viewing_extent(world_shore, xlims, ylims):
     """Clip the shore polygon to the extent derived from the xy lims"""
     import geopandas as gpd
-    from shapely.geometry import Polygon
+    import numpy as np
+    from shapely.geometry import Point
     
-    corner_list = [
-        (xlims[0], ylims[0]),
-        (xlims[0], ylims[1]),
-        (xlims[1], ylims[1]),
-        (xlims[1], ylims[0]),
-        (xlims[0], ylims[0]),
-    ]
-    bb = Polygon([corner for corner in corner_list])
-    bb_df = gpd.GeoDataFrame(geometry=[bb]).set_crs(3411)
+    xd = xlims[1] - xlims[0]
+    yd = ylims[1] - ylims[0]
+    r = np.sqrt(xd ** 2 + yd ** 2)
+    # maximum viewing extent will be circle centered on middle of 
+    # viewing window, with diameter equal to diagnol of view window
+    view_circle = Point((xd / 2 + xlims[0], yd / 2 + ylims[0])).buffer(r/2)
+    view_gdf = gpd.GeoDataFrame(geometry=[view_circle]).set_crs(3411)
     
-    return gpd.overlay(bb_df, world_shore, how="intersection")
+    return gpd.overlay(view_gdf, world_shore, how="intersection")
     
 
 def make_pixel_polygon_from_xy(transform, x, y):
@@ -945,10 +945,22 @@ def make_pixel_poly_gdf(transform, xy_list):
     return gpd.GeoDataFrame(geometry=polys)
 
 
+def angle_between(v1, v2):
+    """Get the angle in degrees between two 2D vectors, supplied as tuples
+    
+    Thanks https://stackoverflow.com/a/2150111/11417211"""
+    import math
+    
+    angle = (math.atan2(v2[1], v2[0]) - math.atan2(v1[1], v1[0])) * 57.2958
+        
+    return angle
+
+
 def plot_poi_pixel_polys(
     xy_list, 
     scale, 
-    seamask_src, 
+    seamask_src,
+    fast_ice_gdf,
     world_shore, 
     poi_name, 
     map_di,
@@ -960,20 +972,23 @@ def plot_poi_pixel_polys(
         xy_list (list): list of 2-tuples of (x, y) coordinates for pixels used
         scale (float): values for scaling viewing window
         seamask_src (rasterio.DatasetReader): seamask raster
+        fast_ice_fp (file_path): path to fast ice climatology file
         world_shore (geopandas.GeoDataFrame): shapefile of world shoreline
         poi_wgs84 (tuple): lat/lon coordinates in form (lat, lon)
         poi_name (str): display name for point of interest
         ax (matplotlib.axes._subplots.AxesSubplot): axis to plot on
     """
+    import geopandas as gpd
     import numpy as np
+    import rasterio as rio
     from rasterio.plot import show
+    from shapely.geometry import Point
     
     # unpack map_di values
     poi_wgs84 = map_di["poi_wgs84"]
     poi_name_adj = map_di["poi_name_adj"]
     text = map_di["text"]
     text_adj = map_di["text_adj"]
-#     text_bg = map_di["text_bg"]
     
     # get x and y limits for viewing window based on 
     #   scale and poi_xy
@@ -987,47 +1002,69 @@ def plot_poi_pixel_polys(
         
     xlims = (center_xy[0] - scale * 1e5, center_xy[0] + scale * 1e5)
     ylims = (center_xy[1] - scale * 1e5, center_xy[1] + scale * 1e5)
-
+    
     # get polygon of shoreline within viewing window
     shore_poly = clip_shore_to_viewing_extent(world_shore, xlims, ylims)
     
     # make pixel polygons
     pixel_polys = make_pixel_poly_gdf(seamask_src.transform, xy_list)
+    
+    # rotate the shapefiles
+    # two vectors we need different in angles from:
+    # v1: unit arrow pointing straight up
+    # v2: center of viewing window to center of raster
+    v1 = (0, 1)
+    domain_cp = fast_ice_gdf.unary_union.centroid.xy
+    v2 = (domain_cp[0] - center_xy[0], domain_cp[1] - center_xy[1])
+    north_angle = angle_between(v2, v1)
+    
+    #fast_ice_gdf.rotate(north_angle, origin=gdf.unary_union.centroid)
+    fast_rot_gdf = fast_ice_gdf.rotate(north_angle, origin=center_xy)
+    shore_rot_gdf = shore_poly.rotate(north_angle, origin=center_xy)
+    pixel_rot_gdf = pixel_polys.rotate(north_angle, origin=center_xy)
+    
+    poi_xy_gdf = gpd.GeoDataFrame(geometry=[Point(poi_xy)])
+    poi_xy_rot_gdf = poi_xy_gdf.rotate(north_angle, origin=center_xy)
+    
+    def fast_ice_cmapper(values):
+        cmap = {
+            -999: "white",
+            0: "#DFD8E1", 
+            1: "lightblue",
+        }
+        return [cmap[v] for v in values]
 
-    # plot basemap
-    show(seamask_src, ax=ax, vmax=10000, cmap="twilight")
+    fast_rot_gdf.plot(ax=ax, color=fast_ice_cmapper(fast_ice_gdf["value"]), edgecolor="none")
     # plot shorelines
-    shore_poly.plot(ax=ax, facecolor="none", edgecolor="gray")
+    shore_rot_gdf.plot(ax=ax, facecolor="none", edgecolor="dimgray")
     # plot cells that will be used
-    pixel_polys.plot(ax=ax, facecolor="none", edgecolor="red")
+    pixel_rot_gdf.plot(ax=ax, facecolor="none", edgecolor="red")
     
     # show the point of interest
     # this allows to not show a coastal point of interest as a dot,
     #  which is the case for one location -__-
+    poi_rot_xy = (poi_xy_rot_gdf[0].x, poi_xy_rot_gdf[0].y)
     if poi_name_adj != "none":
-        ax.scatter(*poi_xy, color="red")
+        #ax.scatter(*poi_xy, color="black")
+        ax.scatter(*poi_rot_xy, color="black")
         # add the adjustments to the point of interest coords
         poi_name_adj = (poi_name_adj[0] * 1e5, poi_name_adj[1] * 1e5)
-        poi_name_xy = [sum(x) for x in zip(poi_xy, poi_name_adj)]
-        ax.text(*poi_name_xy, poi_name, fontsize=10)
+        poi_name_xy = [sum(x) for x in zip(poi_rot_xy, poi_name_adj)]
+        bbox_props = dict(boxstyle='round', facecolor='wheat', edgecolor="none", alpha=0.5)
+        ax.text(*poi_name_xy, poi_name, fontsize=10, bbox=bbox_props)
 
     # display other text
     # add the adjustments for the text coords
     text_adj = [(t[0] * 1e5, t[1] * 1e5) for t in text_adj]
-    text_xy = [[sum(x) for x in zip(poi_xy, t_adj)] for t_adj in text_adj]
+    text_xy = [[sum(x) for x in zip(poi_rot_xy, t_adj)] for t_adj in text_adj]
     _ = [ax.text(*t_xy, t, fontsize=10) for t, t_xy in zip(text, text_xy)]
     
-    # add an arrow point north (towards 0, 0)
-    # first, get components of arrow pointing towards origin
-    #   by dividing by distance from origin to POI
-    r = np.sqrt(poi_xy[0] ** 2 + poi_xy[1] ** 2)
-    xadj = -poi_xy[0] / (r * 20)
-    yadj = -poi_xy[1] / (r * 20)
     # centerpoint in normalized coords for North arrow graphic
-    north_cp = (0.15, 0.88)
+    north_cp = (0.05, 0.9)
+    yadj = 0.06
     # base of arrow
-    xytext = (north_cp[0] - xadj, north_cp[1] - yadj)
-    xy = (north_cp[0] + xadj, north_cp[1] + yadj)
+    xytext = (north_cp[0], north_cp[1] - yadj)
+    xy = (north_cp[0], north_cp[1] + yadj)
     ax.annotate(
         "N", 
         xy=xy,
@@ -1048,23 +1085,23 @@ def plot_poi_pixel_polys(
     return
 
 
-def make_poi_maps(poi_coords, world_shore, seamask_src, out_fp):
-    """Make a pot of the maps showing the cells 
-    used for the points of interest."""
+def make_poi_maps(poi_coords, world_shore, seamask_src, fast_ice_fp, out_fp):
+    """Make a plot of the maps showing the cells 
+    used for the points of interest. Include landfast sea ice
+    climatologies for June.
+    """
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
     from matplotlib.lines import Line2D
-    
+    import geopandas as gpd
+
     fig, axs = plt.subplots(3, 4, figsize=(12, 9))
     
-    poi_kwargs = make_poi_kwargs(poi_coords, seamask_src, world_shore)
+    fast_ice_gdf = gpd.read_file(fast_ice_fp)
+    poi_kwargs = make_poi_kwargs(poi_coords, seamask_src, fast_ice_gdf, world_shore)
 
     for ax, location in zip(axs.flatten(), poi_kwargs.keys()):
         plot_poi_pixel_polys(**poi_kwargs[location], ax=ax)
-
-    # delete last two unused subplots
-    # axs[-1][-1].set_axis_off() 
-    # axs[-1][-2].set_axis_off() 
 
     gs = axs[2, 2].get_gridspec()
     # remove the underlying axes
@@ -1077,6 +1114,9 @@ def make_poi_maps(poi_coords, world_shore, seamask_src, out_fp):
 
     # Manually create legend handles (patches)
     land_patch = mpatches.Patch(color="#DFD8E1", label="Land mask")
+    # fast_patch = mpatches.Patch(color="#7ba1c2", label="Landfast ice")
+    fast_patch = mpatches.Patch(color="lightblue", label="Landfast ice")
+
     #pixel_patch = mpatches.Patch(color="red", fill=False, label="Pixels selected for \npoint location")
     pixel_line = Line2D(
         [0], [0], 
@@ -1089,7 +1129,7 @@ def make_poi_maps(poi_coords, world_shore, seamask_src, out_fp):
     )
 
     # Add legend to bottom-right ax
-    axbig.legend(handles=[land_patch, pixel_line], loc="center", fontsize=14)
+    axbig.legend(handles=[land_patch, fast_patch, pixel_line], loc="center", fontsize=14)
 
     plt.tight_layout()
     save_fig(out_fp)
