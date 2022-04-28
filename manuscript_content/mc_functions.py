@@ -225,6 +225,112 @@ def make_isl_maps(fubu, orac, landmask, out_fp):
 
     plt.show()
     
+
+def get_poi_scatter_args(poi_coords, raster_fp):
+    """Get variables needed to plot the locations as
+    scatter plots on top of the various "maps" imshow-based plots.
+    """
+    import rasterio as rio
+    
+    maps_poi_offsets = {
+        "Utqiaġvik": (8, 0),
+        "Prudhoe Bay": (10, 8),
+        "Pevek": (-5, -12),
+        "Tiksi": (0, -12),
+        "Sabetta": (0, -12),
+        "Mestersvig": (10, 0),
+        "Clyde River": (0, 15),
+        "Churchill": (-15, -12),
+    }
+
+    # use empty args to get same WGS84 coords for the coastal locations
+    poi_kwargs = make_poi_kwargs(poi_coords, None, None, None)
+    poi_xy = {
+        place: reproject_poi(poi_kwargs[place]["map_di"]["poi_wgs84"])
+        for place in poi_kwargs
+        # omit places without actual points
+        if poi_kwargs[place]["map_di"]["poi_name_adj"] != "none"
+    }
+    # open a dataset to use the .index()method for getting the row/cols for
+    #  plotting the scatters
+    # first, define a no-operation function to return the exact
+    #  row, column decimal values for plotting scatter on
+    #  imshow()
+    def no_op(x):
+        return x
+
+    with rio.open(raster_fp) as src:
+        poi_rc = {place: src.index(*poi_xy[place], op=no_op) for place in poi_xy}
+
+    # make into r and c lists
+    poi_r = [poi_rc[place][0] for place in poi_rc]
+    poi_c = [poi_rc[place][1] for place in poi_rc]
+    places = list(poi_rc.keys())
+    # add points and text labels
+    bbox_props = dict(boxstyle="round", facecolor="white", edgecolor="none", alpha=0.75)
+
+    return poi_r, poi_c, places, maps_poi_offsets, bbox_props
+
+
+def make_fastice_maps(fast_ice_fps, landmask, titles, poi_coords, out_fp):
+    """Make the maps of landfast ice
+
+    Args:
+        fast_ice_fps (list): list of file paths to landfast ice rasters
+            (one median, one maximum)
+        landmask (np.ndarray): array where values of true correspond to pixels
+            that overlap land
+        titles (list): list of titles for the subplots
+        poi_coords (pandas.DataFrame): dataframe of the points-of-interest coordinates
+        out_fp (pathlib.PosixPath): absolute path to image write location
+
+    Returns:
+        None, writes image to out_fp
+    """
+    import copy
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import matplotlib.patches as mpatches
+    import rasterio as rio
+
+    # plot data
+    cmap = copy.copy(plt.cm.get_cmap("viridis"))
+    cmap.set_bad(color="white")
+    cmap.set_under(color="gray")
+    fig, axs = plt.subplots(1, 2, figsize=(10, 7.5))
+
+    poi_r, poi_c, places, maps_poi_offsets, bbox_props = get_poi_scatter_args(
+        poi_coords, fast_ice_fps[0]
+    )
+
+    for fp, ax, title in zip(fast_ice_fps, axs, titles):
+        with rio.open(fp) as src:
+            fast_arr = src.read(1).astype(np.float32)
+        fast_arr[fast_arr == -999] = np.nan
+        fast_arr[landmask] = -1
+        im = ax.imshow(fast_arr, interpolation="none", cmap=cmap, vmin=0, vmax=5)
+        ax.scatter(poi_c, poi_r, color="black")
+        for x, y, place in zip(poi_c, poi_r, places):
+            xoff, yoff = maps_poi_offsets[place]
+            ax.text(x + xoff, y + yoff, place, bbox=bbox_props)
+        ax.set_title(title, fontdict={"fontsize": 12})
+        ax.set_xticks([])
+        ax.set_yticks([])
+    fig.subplots_adjust(wspace=-0.2, right=0.9, left=-0.05, bottom=0.1)
+    patch_ax = fig.add_axes([0, 0, 0.9, 0.1])
+
+    fast_patch = mpatches.Patch(
+        color="#414487", label="Landfast ice June 1972-2007 climatology"
+    )
+    patch_ax.set_axis_off()
+    # Add legend to bottom-right ax
+    patch_ax.legend(handles=[fast_patch], loc="center", fontsize=14)
+    fig.set_size_inches(10, 7.5)
+    save_fig(out_fp)
+    plt.show()
+
+    return
+
     
 def make_date_lag_maps(fubu, orac, landmask, out_fp):
     """Make maps of mean lagged date values, i.e. the 
@@ -981,6 +1087,7 @@ def plot_poi_pixel_polys(
     import geopandas as gpd
     import numpy as np
     import rasterio as rio
+    from matplotlib_scalebar.scalebar import ScaleBar
     from rasterio.plot import show
     from shapely.geometry import Point
     
@@ -1039,6 +1146,8 @@ def plot_poi_pixel_polys(
     shore_rot_gdf.plot(ax=ax, facecolor="none", edgecolor="dimgray")
     # plot cells that will be used
     pixel_rot_gdf.plot(ax=ax, facecolor="none", edgecolor="red")
+    # add scalebar
+    ax.add_artist(ScaleBar(1, location="lower right"))
     
     # show the point of interest
     # this allows to not show a coastal point of interest as a dot,
@@ -1050,7 +1159,7 @@ def plot_poi_pixel_polys(
         # add the adjustments to the point of interest coords
         poi_name_adj = (poi_name_adj[0] * 1e5, poi_name_adj[1] * 1e5)
         poi_name_xy = [sum(x) for x in zip(poi_rot_xy, poi_name_adj)]
-        bbox_props = dict(boxstyle='round', facecolor='wheat', edgecolor="none", alpha=0.5)
+        bbox_props = dict(boxstyle="round", facecolor="#DFD8E1", edgecolor="none", alpha=0.75)
         ax.text(*poi_name_xy, poi_name, fontsize=10, bbox=bbox_props)
 
     # display other text
