@@ -91,7 +91,7 @@ def save_fig(fp):
     return
 
 
-def make_totals_maps(ds, varnames, landmask, titles, out_fp):
+def make_totals_maps(ds, varnames, landmask, titles, poi_coords, raster_fp, out_fp):
     """Make the totals maps - heatmaps of
     pixel-wise counts of years where indicator was defined -
     for a supplied indicators dataset and variable names
@@ -101,8 +101,11 @@ def make_totals_maps(ds, varnames, landmask, titles, out_fp):
         varnames (list): names of variables in ds to count and plot totals for
         landmask (np.ndarray): array where values of true correspond to pixels
             that overlap land
-        landmask_poly (geopandas.GeoDataFrame): polgyon of the
-            landmask
+        titles (list): list of titles for the totals maps
+        poi_coords (pandas.DataFrame): dataframe of the points-of-interest coordinates,
+            used for getting place scatter info
+        raster_fp (file_path): path to raster with same grid as fubu / orac, 
+            used for getting place scatter info
         out_fp (pathlib.PosixPath): absolute path to image write location
 
     Returns:
@@ -129,20 +132,21 @@ def make_totals_maps(ds, varnames, landmask, titles, out_fp):
     cmap.set_under(color="white")
     fig, axs = plt.subplots(1, 2, figsize=(10, 7.5))
 
-    # need to write temporary raster for plotting
+    # get vars for plotting place names
+    poi_r, poi_c, places, maps_poi_offsets, bbox_props = get_poi_scatter_args(
+        poi_coords, raster_fp
+    )
 
     for arr, ax, title in zip(plot_arrs, axs, titles):
-        # with rio.open("temp.tif", "w+", **meta) as src:
-        # src.write(arr, 1)
         im = ax.imshow(arr, interpolation="none", cmap=cmap, vmin=1, vmax=39)
-        # im = show((src, 1), ax=ax)
-        # landmask_poly.plot(ax=ax, facecolor='none', edgecolor="gray")
+        ax.scatter(poi_c, poi_r, color="black")
+        for x, y, place in zip(poi_c, poi_r, places):
+            xoff, yoff = maps_poi_offsets[place]
+            ax.text(x + xoff, y + yoff, place, bbox=bbox_props)
         ax.set_title(title, fontdict={"fontsize": 12})
         ax.set_xticks([])
         ax.set_yticks([])
     fig.subplots_adjust(wspace=-0.25, right=0.95, left=0.01)
-    # cbar_ax = fig.add_axes([0.85, 0.18, 0.1, 0.8])
-    # cbar = fig.colorbar(im, cax=cbar_ax)
     cax = ax.inset_axes([1.04, 0.2, 0.05, 0.6], transform=ax.transAxes)
     cbar = fig.colorbar(im, ax=axs, cax=cax, shrink=1.2)
     cbar.ax.tick_params(labelsize=8)
@@ -156,13 +160,17 @@ def make_totals_maps(ds, varnames, landmask, titles, out_fp):
     return
 
 
-def make_isl_maps(fubu, orac, landmask, out_fp):
+def make_isl_maps(fubu, orac, landmask, poi_coords, raster_fp, out_fp):
     """Create the Ice Season Length maps
     
     Args:
         fubu (xarray.DataSet): FUBU indicators dataset
         orac (xarray.DataSet): ORAC indicators dataset
         landmask (numpy.ndarray): 2D boolean array where land values are True
+        poi_coords (pandas.DataFrame): dataframe of the points-of-interest coordinates,
+            used for getting place scatter info
+        raster_fp (file_path): path to raster with same grid as fubu / orac, 
+            used for getting place scatter info
         out_fp (pathlib.PosixPath): absolute path to image write location
         
     Returns:
@@ -201,9 +209,18 @@ def make_isl_maps(fubu, orac, landmask, out_fp):
     cmap.set_bad(color="gray")
     cmap.set_under(color="white")
     fig, axs = plt.subplots(1, 2, figsize=(10, 7.5))
+    
+    # get vars for plotting place names
+    poi_r, poi_c, places, maps_poi_offsets, bbox_props = get_poi_scatter_args(
+        poi_coords, raster_fp
+    )
 
     for arr, ax in zip(isl_arrs, axs):
         im = ax.imshow(arr, interpolation="none", cmap=cmap, vmin=1, vmax=365)
+        ax.scatter(poi_c, poi_r, color="black")
+        for x, y, place in zip(poi_c, poi_r, places):
+            xoff, yoff = maps_poi_offsets[place]
+            ax.text(x + xoff, y + yoff, place, bbox=bbox_props)
         ax.set_xticks([])
         ax.set_yticks([])
 
